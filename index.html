@@ -170,6 +170,27 @@
     background: #0ea5e9; border-color: #0ea5e9; color: white;
   }
 
+  /* Input with clear button */
+  .input-clear-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .clear-btn {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    min-width: 56px;
+  }
+  .clear-btn:hover { background: #fecaca; }
+
   .multi-row {
     display: grid;
     grid-template-columns: 1fr 80px 1fr 36px;
@@ -408,7 +429,15 @@
         <summary>Flight & Crew</summary>
         <div class="fieldset-body">
           <label>StatFlight Number</label>
-          <input type="text" id="statFlightNum" placeholder="e.g., StatFlight 1">
+          <select id="statFlightNum">
+            <option value="">— Select —</option>
+            <option value="StatFlight 1">StatFlight 1</option>
+            <option value="StatFlight 2">StatFlight 2</option>
+            <option value="StatFlight 3">StatFlight 3</option>
+            <option value="StatFlight 4">StatFlight 4</option>
+            <option value="StatFlight 5">StatFlight 5</option>
+            <option value="StatFlight 6">StatFlight 6</option>
+          </select>
           <label>Flight Crew</label>
           <input type="text" id="flightCrew" placeholder="e.g., RN: Will White; Medic: Chris Smith">
         </div>
@@ -442,9 +471,15 @@
         <summary>Sending Hospital (IFT)</summary>
         <div class="fieldset-body">
           <label>Sending Hospital Name</label>
-          <input type="text" id="sendHospName" list="hospitalList" placeholder="Start typing or pick from list…" oninput="autoFillHospAddr('send')">
-          <label>Sending Hospital Address</label>
-          <input type="text" id="sendHospAddr" placeholder="1104 E Grace St, Rensselaer IN 47978">
+          <div class="input-clear-row">
+            <input type="text" id="sendHospName" list="hospitalList" placeholder="Start typing or pick from list…" oninput="autoFillHospAddr('send')">
+            <button type="button" class="clear-btn" onclick="clearHosp('send')" title="Clear">✕</button>
+          </div>
+          <label>Sending Hospital Address (editable)</label>
+          <div class="input-clear-row">
+            <input type="text" id="sendHospAddr" placeholder="1104 E Grace St, Rensselaer IN 47978">
+            <button type="button" class="clear-btn" onclick="$('sendHospAddr').value=''" title="Clear">✕</button>
+          </div>
           <div class="row">
             <div><label>Sending RN Name</label><input type="text" id="sendNurse" placeholder="Joshua Kuiper, RN"></div>
             <div><label>Sending MD Name + Credentials</label><input type="text" id="sendMD" placeholder="Austin Gaby, MD"></div>
@@ -479,9 +514,15 @@
         <summary>Receiving Facility</summary>
         <div class="fieldset-body">
           <label>Receiving Hospital</label>
-          <input type="text" id="recvHosp" list="hospitalList" placeholder="Start typing or pick from list…" oninput="autoFillHospAddr('recv')">
-          <label>Receiving Hospital Address</label>
-          <input type="text" id="recvAddr" placeholder="1701 N Senate Ave, Indianapolis IN">
+          <div class="input-clear-row">
+            <input type="text" id="recvHosp" list="hospitalList" placeholder="Start typing or pick from list…" oninput="autoFillHospAddr('recv')">
+            <button type="button" class="clear-btn" onclick="clearHosp('recv')" title="Clear">✕</button>
+          </div>
+          <label>Receiving Hospital Address (editable)</label>
+          <div class="input-clear-row">
+            <input type="text" id="recvAddr" placeholder="1701 N Senate Ave, Indianapolis IN">
+            <button type="button" class="clear-btn" onclick="$('recvAddr').value=''" title="Clear">✕</button>
+          </div>
           <label>Accepting Physician (Name + Credentials)</label>
           <input type="text" id="recvMD" placeholder="Drahos, MD">
           <label>Admit Destination / Unit</label>
@@ -1534,9 +1575,18 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
     const nameField = which === 'send' ? 'sendHospName' : 'recvHosp';
     const addrField = which === 'send' ? 'sendHospAddr' : 'recvAddr';
     const name = $(nameField).value.trim();
+    // Only auto-fill if the typed name exactly matches a known hospital AND the address is empty
     if (HOSPITAL_ADDRESSES[name] && !$(addrField).value.trim()) {
       $(addrField).value = HOSPITAL_ADDRESSES[name];
     }
+  }
+
+  function clearHosp(which){
+    const nameField = which === 'send' ? 'sendHospName' : 'recvHosp';
+    const addrField = which === 'send' ? 'sendHospAddr' : 'recvAddr';
+    $(nameField).value = '';
+    $(addrField).value = '';
+    $(nameField).focus();
   }
 
   // ====== Transcript loading and extraction ======
