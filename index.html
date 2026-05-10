@@ -709,13 +709,13 @@
       <details>
         <summary>Diagnosis & Time-Sensitivity</summary>
         <div class="fieldset-body">
-          <label>ICD-10 Search (live, via NIH Clinical Tables)</label>
+          <label>Diagnosis List (searchable; pick one or more)</label>
           <div class="icd-search-wrap">
-            <input type="text" id="icdSearch" placeholder="Type at least 2 letters (e.g., 'pneumoperitoneum', 'STEMI', 'K26')" autocomplete="off">
-            <div id="icdResults" class="icd-results"></div>
+            <input type="text" id="dxSearch" placeholder="Type to filter (e.g., 'STEMI', 'sepsis', 'aortic')" autocomplete="off">
+            <div id="dxResults" class="icd-results"></div>
           </div>
-          <div id="icdChips" class="icd-chips"></div>
-          <div class="hint">Click a result to add it. Codes appear as chips and are included with the diagnosis text below.</div>
+          <div id="dxChips" class="icd-chips"></div>
+          <div class="hint">Curated list of ~150 common flight transport diagnoses. Click to add as a chip. Free-text additions go in the box below.</div>
           <button type="button" class="calc-btn" onclick="getTreatmentSummary()" style="margin-top:8px">🩺 Get AI Treatment Summary (separate from narrative)</button>
           <div id="txSummary"></div>
 
@@ -1613,104 +1613,158 @@
     return Array.from(document.querySelectorAll('.ts-flag:checked')).map(c => c.value);
   }
 
-  // ====== ICD-10 Search (NIH Clinical Tables) ======
-  // Public, no-auth endpoint. Docs: https://clinicaltables.nlm.nih.gov/apidoc/icd10cm/v3/doc.html
-  const ICD_ENDPOINT = 'https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search';
-  const icdSelected = []; // [{code, name}]
-  let icdSearchTimer = null;
-  let icdLastQuery = '';
-
-  function renderIcdChips(){
-    const wrap = $('icdChips');
+  // ====== Diagnosis Picker (curated flight-transport list) ======
+  // ~150 common adult + pediatric flight/critical-care transport diagnoses.
+  // No ICD-10 codes by design (kept light for mobile). A standalone ICD-10
+  // lookup can be added later as a separate feature.
+  const DX_LIST = [
+    'STEMI - anterior','STEMI - inferior','STEMI - lateral','STEMI - posterior',
+    'NSTEMI','Unstable angina','Cardiogenic shock','Acute decompensated heart failure',
+    'Atrial fibrillation with RVR','Atrial flutter with RVR','Sustained ventricular tachycardia',
+    'Ventricular fibrillation, post-arrest','Pulseless electrical activity, post-ROSC',
+    'Complete heart block','Cardiac tamponade','Acute pericarditis',
+    'Decompensated aortic stenosis','Acute mitral regurgitation','Left ventricular thrombus',
+    'Out-of-hospital cardiac arrest, ROSC',
+    'Aortic dissection - Stanford A','Aortic dissection - Stanford B',
+    'Ruptured abdominal aortic aneurysm','Symptomatic abdominal aortic aneurysm',
+    'Acute limb ischemia','Acute mesenteric ischemia',
+    'Pulmonary embolism - massive','Pulmonary embolism - submassive',
+    'Extensive deep vein thrombosis','Hypertensive emergency',
+    'Ischemic stroke - LVO (anterior circulation)',
+    'Ischemic stroke - LVO (posterior circulation)',
+    'Ischemic stroke - non-LVO','Intracerebral hemorrhage','Subarachnoid hemorrhage',
+    'Acute subdural hematoma','Epidural hematoma',
+    'Severe traumatic brain injury','Moderate traumatic brain injury',
+    'Status epilepticus','Refractory seizures','Bacterial meningitis','Encephalitis',
+    'Guillain-Barré syndrome','Myasthenic crisis',
+    'Cervical spinal cord injury','Thoracolumbar spinal cord injury',
+    'Cerebral venous sinus thrombosis','Brainstem stroke','Post-arrest anoxic brain injury',
+    'ARDS (moderate-severe)','Acute hypoxic respiratory failure',
+    'Acute hypercapnic respiratory failure','Status asthmaticus',
+    'Severe COPD exacerbation','Severe pneumonia with sepsis','Aspiration pneumonia',
+    'Tension pneumothorax','Simple pneumothorax','Hemothorax','Tracheobronchial injury',
+    'Cardiogenic pulmonary edema','Pulmonary hemorrhage','Tracheostomy complication',
+    'Upper airway obstruction (angioedema/FB)',
+    'Polytrauma','Penetrating chest trauma','Penetrating abdominal trauma',
+    'Gunshot wound - head','Gunshot wound - chest','Gunshot wound - abdomen','Gunshot wound - extremity',
+    'Blunt chest trauma','Blunt abdominal trauma','Flail chest',
+    'Unstable pelvic fracture','Open femur fracture',
+    'Major burn (>20% TBSA)','Inhalation injury','Electrical burn',
+    'Crush injury / crush syndrome','Traumatic amputation','Degloving injury',
+    'Stab wound - chest','Stab wound - abdomen',
+    'Complete bowel obstruction','Bowel perforation','Pneumoperitoneum',
+    'Perforated duodenal ulcer','Perforated gastric ulcer','Mesenteric ischemia',
+    'Severe acute pancreatitis','Variceal hemorrhage',
+    'Upper GI bleed','Lower GI bleed','Acute hepatic failure','Strangulated hernia',
+    'Septic shock','Severe sepsis','Necrotizing fasciitis','Toxic shock syndrome',
+    'Endocarditis with embolic complications','COVID-19, severe',
+    'Severe preeclampsia','Eclampsia','HELLP syndrome','Postpartum hemorrhage',
+    'Placental abruption','Placenta previa with bleeding','Uterine rupture',
+    'Ruptured ectopic pregnancy','Cord prolapse','Amniotic fluid embolism',
+    'Preterm labor (<34 weeks)',
+    'Neonatal respiratory distress','Neonatal sepsis','Pediatric DKA',
+    'Pediatric status asthmaticus','Pediatric status epilepticus',
+    'Pediatric severe TBI','Pediatric polytrauma','Severe bronchiolitis',
+    'Severe croup','Congenital heart disease decompensation','Pediatric septic shock',
+    'Opioid overdose','Polysubstance overdose','Carbon monoxide poisoning',
+    'Tricyclic antidepressant overdose','Beta blocker / CCB overdose',
+    'Salicylate toxicity','Severe hypothermia','Heat stroke','Drowning / submersion injury',
+    'Adult DKA','Hyperosmolar hyperglycemic state','Severe hypoglycemia',
+    'Myxedema coma','Thyroid storm','Adrenal crisis','Severe hyperkalemia',
+    'Sickle cell crisis with acute chest syndrome','Massive transfusion protocol activation',
+    'TTP / HUS','Disseminated intravascular coagulation','Unstable severe anemia',
+    'AKI requiring CRRT','ESRD with missed dialysis / hyperkalemia','Severe rhabdomyolysis',
+    'Refractory anaphylaxis','Hypertensive encephalopathy',
+    'Post-cardiac arrest syndrome','ECMO transfer candidate',
+    'Cardiogenic shock requiring IABP','LVAD complication',
+    'Suicidal ideation requiring psychiatric transfer',
+  ];
+  const dxSelected = []; // [string]
+  function renderDxChips(){
+    const wrap = $('dxChips');
     wrap.innerHTML = '';
-    icdSelected.forEach((d, idx) => {
+    dxSelected.forEach((name, idx) => {
       const chip = document.createElement('span');
       chip.className = 'icd-chip';
       const text = document.createElement('span');
       text.className = 'chip-text';
-      text.title = `${d.code} — ${d.name}`;
-      text.textContent = `${d.code} — ${d.name}`;
+      text.title = name;
+      text.textContent = name;
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = '×';
       btn.title = 'Remove';
-      btn.addEventListener('click', () => {
-        icdSelected.splice(idx, 1);
-        renderIcdChips();
-      });
+      btn.addEventListener('click', () => { dxSelected.splice(idx, 1); renderDxChips(); });
       chip.appendChild(text);
       chip.appendChild(btn);
       wrap.appendChild(chip);
     });
   }
-  function addIcdCode(code, name){
-    if (icdSelected.some(d => d.code === code)) return;
-    icdSelected.push({ code, name });
-    renderIcdChips();
+  function addDx(name){
+    if (dxSelected.includes(name)) return;
+    dxSelected.push(name);
+    renderDxChips();
   }
-  function hideIcdResults(){
-    $('icdResults').classList.remove('show');
+  function hideDxResults(){ $('dxResults').classList.remove('show'); }
+  function filterDx(q){
+    if (!q) return [];
+    const needle = q.toLowerCase();
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wordRe = new RegExp('\\b' + escaped, 'i');
+    const scored = DX_LIST.map(name => {
+      const lc = name.toLowerCase();
+      if (lc === needle) return { name, score: 0 };
+      if (lc.startsWith(needle)) return { name, score: 1 };
+      if (wordRe.test(name)) return { name, score: 2 };
+      if (lc.includes(needle)) return { name, score: 3 };
+      return null;
+    }).filter(Boolean);
+    scored.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+    return scored.slice(0, 20).map(s => s.name);
   }
-  async function fetchIcd(query){
-    const url = `${ICD_ENDPOINT}?sf=code,name&terms=${encodeURIComponent(query)}&maxList=20`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('ICD search HTTP ' + res.status);
-    return await res.json(); // [total, [codes], extra, [[code, name], ...]]
-  }
-  function renderIcdResults(rows){
-    const box = $('icdResults');
+  function renderDxResults(names){
+    const box = $('dxResults');
     box.innerHTML = '';
-    if (!rows || !rows.length) {
+    if (!names.length) {
       const empty = document.createElement('div');
       empty.className = 'icd-result empty';
-      empty.textContent = 'No matches.';
+      empty.textContent = 'No matches. (Free-text goes in the box below.)';
       box.appendChild(empty);
     } else {
-      rows.forEach(([code, name]) => {
+      names.forEach(name => {
         const div = document.createElement('div');
         div.className = 'icd-result';
-        div.innerHTML = `<span class="code"></span><span class="name"></span>`;
-        div.querySelector('.code').textContent = code;
-        div.querySelector('.name').textContent = name;
+        const span = document.createElement('span');
+        span.className = 'name';
+        span.textContent = name;
+        div.appendChild(span);
         div.addEventListener('mousedown', e => {
-          e.preventDefault(); // keep focus on input
-          addIcdCode(code, name);
-          $('icdSearch').value = '';
-          hideIcdResults();
-          $('icdSearch').focus();
+          e.preventDefault();
+          addDx(name);
+          $('dxSearch').value = '';
+          hideDxResults();
+          $('dxSearch').focus();
         });
         box.appendChild(div);
       });
     }
     box.classList.add('show');
   }
-  function setupIcdSearch(){
-    const input = $('icdSearch');
+  function setupDxSearch(){
+    const input = $('dxSearch');
     if (!input) return;
     input.addEventListener('input', () => {
       const q = input.value.trim();
-      icdLastQuery = q;
-      clearTimeout(icdSearchTimer);
-      if (q.length < 2) { hideIcdResults(); return; }
-      icdSearchTimer = setTimeout(async () => {
-        try {
-          const data = await fetchIcd(q);
-          // Ignore stale responses if user kept typing
-          if (icdLastQuery !== q) return;
-          renderIcdResults(data[3] || []);
-        } catch (err) {
-          const box = $('icdResults');
-          box.innerHTML = '<div class="icd-result empty">Search failed: ' + (err.message || err) + '</div>';
-          box.classList.add('show');
-        }
-      }, 220);
+      if (!q) { hideDxResults(); return; }
+      renderDxResults(filterDx(q));
     });
-    input.addEventListener('blur', () => setTimeout(hideIcdResults, 150));
+    input.addEventListener('blur', () => setTimeout(hideDxResults, 150));
     input.addEventListener('focus', () => {
-      if (input.value.trim().length >= 2) $('icdResults').classList.add('show');
+      const q = input.value.trim();
+      if (q) renderDxResults(filterDx(q));
     });
   }
-  setupIcdSearch();
+  setupDxSearch();
 
   // ====== AI Treatment Summary (Phase 3a) ======
   // Returns a brief, non-narrative treatment summary for the selected diagnoses.
@@ -1719,7 +1773,7 @@
     const dx = combinedDiagnosis();
     const card = $('txSummary');
     if (!dx) {
-      card.innerHTML = '<div class="tx-summary" style="border-color:#fca5a5;background:#fef2f2;color:#991b1b">Add at least one ICD-10 code or diagnosis text first.</div>';
+      card.innerHTML = '<div class="tx-summary" style="border-color:#fca5a5;background:#fef2f2;color:#991b1b">Add at least one diagnosis chip or free-text diagnosis first.</div>';
       return;
     }
     const settings = loadSettings();
@@ -1756,8 +1810,8 @@ Return plain text only.`;
   // Combined diagnosis string for AI prompt and outputs.
   function combinedDiagnosis(){
     const free = val('diagnosis');
-    if (!icdSelected.length) return free;
-    const list = icdSelected.map(d => `${d.code} ${d.name}`).join('; ');
+    if (!dxSelected.length) return free;
+    const list = dxSelected.join('; ');
     return free ? `${list}; ${free}` : list;
   }
 
@@ -2118,7 +2172,7 @@ Return plain text only.`;
       receiving: { hospital: val('recvHosp'), address: val('recvAddr'),
                    md: nameCred('recvMD'), unit: val('recvUnit'), service: val('recvSvc') },
       diagnosis: combinedDiagnosis(),
-      icdCodes: icdSelected.slice(),
+      diagnosisChips: dxSelected.slice(),
       timeFlags: gatherTSFlags(),
       servicesUnavail: val('servicesUnavail'),
       acuity: val('acuity'),
@@ -2583,9 +2637,9 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     $('templateOut').classList.remove('polished');
     $('complianceList').innerHTML = '';
     $('distanceCard').style.display = 'none';
-    icdSelected.length = 0;
-    renderIcdChips();
-    if ($('icdSearch')) $('icdSearch').value = '';
+    dxSelected.length = 0;
+    renderDxChips();
+    if ($('dxSearch')) $('dxSearch').value = '';
     if ($('groundReasonText')) $('groundReasonText').value = '';
     if ($('txSummary')) $('txSummary').innerHTML = '';
     if ($('medSummary')) $('medSummary').innerHTML = '';
