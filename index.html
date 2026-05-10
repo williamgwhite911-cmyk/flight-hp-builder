@@ -177,6 +177,16 @@
     gap: 6px;
     align-items: stretch;
   }
+  /* Name + credentials + clear */
+  .name-cred-row {
+    display: grid;
+    grid-template-columns: 1fr 110px auto;
+    gap: 6px;
+    align-items: stretch;
+  }
+  @media (max-width: 1000px) {
+    .name-cred-row { grid-template-columns: 1fr 90px auto; }
+  }
   .clear-btn {
     background: #fee2e2;
     color: #991b1b;
@@ -480,9 +490,28 @@
             <input type="text" id="sendHospAddr" placeholder="1104 E Grace St, Rensselaer IN 47978">
             <button type="button" class="clear-btn" onclick="$('sendHospAddr').value=''" title="Clear">✕</button>
           </div>
-          <div class="row">
-            <div><label>Sending RN Name</label><input type="text" id="sendNurse" placeholder="Joshua Kuiper, RN"></div>
-            <div><label>Sending MD Name + Credentials</label><input type="text" id="sendMD" placeholder="Austin Gaby, MD"></div>
+          <label>Sending RN</label>
+          <div class="name-cred-row">
+            <input type="text" id="sendNurseName" placeholder="Name (e.g., Joshua Kuiper)">
+            <select id="sendNurseCred">
+              <option value="RN">RN</option>
+              <option value="BSN, RN">BSN, RN</option>
+              <option value="MSN, RN">MSN, RN</option>
+              <option value="LPN">LPN</option>
+            </select>
+            <button type="button" class="clear-btn" onclick="clearNameCred('sendNurse')" title="Clear">✕</button>
+          </div>
+          <label>Sending Physician</label>
+          <div class="name-cred-row">
+            <input type="text" id="sendMDName" placeholder="Name (e.g., Austin Gaby)">
+            <select id="sendMDCred">
+              <option value="MD">MD</option>
+              <option value="DO">DO</option>
+              <option value="PA">PA</option>
+              <option value="NP">NP</option>
+              <option value="FNP">FNP</option>
+            </select>
+            <button type="button" class="clear-btn" onclick="clearNameCred('sendMD')" title="Clear">✕</button>
           </div>
         </div>
       </details>
@@ -494,15 +523,43 @@
         <summary>Scene Location</summary>
         <div class="fieldset-body">
           <label>Scene Description / Mile Marker / Address</label>
-          <input type="text" id="sceneLoc" placeholder="MM 47, I-65 NB, Jasper County">
+          <input type="text" id="sceneLoc" placeholder="MM 47, I-65 NB">
+          <div class="row">
+            <div><label>County</label>
+              <input type="text" id="sceneCounty" list="countyList" placeholder="Jasper County">
+            </div>
+            <div><label>Sending Agency</label>
+              <input type="text" id="sceneAgency" list="emsList" placeholder="Start typing…">
+            </div>
+          </div>
+          <label>Ambulance / Unit Number</label>
+          <input type="text" id="sceneAmbulance" placeholder="Medic 12, Engine 4, Squad 7">
           <div class="row">
             <div><label>Latitude</label><input type="number" id="sceneLat" step="any" placeholder="40.5615"></div>
             <div><label>Longitude</label><input type="number" id="sceneLon" step="any" placeholder="-87.1547"></div>
           </div>
-          <label>Sending Agency</label>
-          <input type="text" id="sceneAgency" list="emsList" placeholder="Start typing or pick from list…">
-          <label>Sending Provider Name + Title</label>
-          <input type="text" id="sceneProv" placeholder="Medic 12, Paramedic Sarah Smith">
+          <label>Crew Member 1</label>
+          <div class="name-cred-row">
+            <input type="text" id="sceneCrew1Name" placeholder="Name (e.g., Sarah Smith)">
+            <select id="sceneCrew1Cred">
+              <option value="Paramedic">Paramedic</option>
+              <option value="EMT">EMT</option>
+              <option value="AEMT">AEMT</option>
+              <option value="EMR">EMR</option>
+            </select>
+            <button type="button" class="clear-btn" onclick="clearNameCred('sceneCrew1')" title="Clear">✕</button>
+          </div>
+          <label>Crew Member 2</label>
+          <div class="name-cred-row">
+            <input type="text" id="sceneCrew2Name" placeholder="Name (e.g., Mike Jones)">
+            <select id="sceneCrew2Cred">
+              <option value="Paramedic">Paramedic</option>
+              <option value="EMT">EMT</option>
+              <option value="AEMT">AEMT</option>
+              <option value="EMR">EMR</option>
+            </select>
+            <button type="button" class="clear-btn" onclick="clearNameCred('sceneCrew2')" title="Clear">✕</button>
+          </div>
           <label>Mechanism / Working Diagnosis</label>
           <textarea id="sceneMech" placeholder="MVC vs tree, +LOC, restrained driver, frontal impact, deformity to dash"></textarea>
         </div>
@@ -523,8 +580,18 @@
             <input type="text" id="recvAddr" placeholder="1701 N Senate Ave, Indianapolis IN">
             <button type="button" class="clear-btn" onclick="$('recvAddr').value=''" title="Clear">✕</button>
           </div>
-          <label>Accepting Physician (Name + Credentials)</label>
-          <input type="text" id="recvMD" placeholder="Drahos, MD">
+          <label>Accepting Physician</label>
+          <div class="name-cred-row">
+            <input type="text" id="recvMDName" placeholder="Name (e.g., Drahos)">
+            <select id="recvMDCred">
+              <option value="MD">MD</option>
+              <option value="DO">DO</option>
+              <option value="PA">PA</option>
+              <option value="NP">NP</option>
+              <option value="FNP">FNP</option>
+            </select>
+            <button type="button" class="clear-btn" onclick="clearNameCred('recvMD')" title="Clear">✕</button>
+          </div>
           <label>Admit Destination / Unit</label>
           <input type="text" id="recvUnit" placeholder="ED, Trauma Bay 1 / OR / SICU">
           <label>Service / Specialty (if known)</label>
@@ -613,21 +680,45 @@
             <div><label>RASS</label><input type="text" id="rass" placeholder="0"></div>
           </div>
           <label>Skin</label>
-          <input type="text" id="aSkin" placeholder="cool to the touch, mild diaphoresis">
+          <div class="input-clear-row">
+            <input type="text" id="aSkin" list="skinList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aSkin').value=''">✕</button>
+          </div>
           <label>Pupils</label>
-          <input type="text" id="aPupils" placeholder="PERRLA 2 mm bilaterally">
+          <div class="input-clear-row">
+            <input type="text" id="aPupils" list="pupilList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aPupils').value=''">✕</button>
+          </div>
           <label>Head/Neck</label>
-          <input type="text" id="aHead" placeholder="atraumatic, trachea midline">
+          <div class="input-clear-row">
+            <input type="text" id="aHead" list="headList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aHead').value=''">✕</button>
+          </div>
           <label>Cardiac</label>
-          <input type="text" id="aCardiac" placeholder="sinus rhythm, no ectopy, no JVD">
+          <div class="input-clear-row">
+            <input type="text" id="aCardiac" list="cardiacList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aCardiac').value=''">✕</button>
+          </div>
           <label>Lungs</label>
-          <input type="text" id="aLungs" placeholder="coarse rales and crackles bilaterally">
+          <div class="input-clear-row">
+            <input type="text" id="aLungs" list="lungsList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aLungs').value=''">✕</button>
+          </div>
           <label>Abdomen</label>
-          <input type="text" id="aAbd" placeholder="severely distended, tender to palpation diffusely">
+          <div class="input-clear-row">
+            <input type="text" id="aAbd" list="abdList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aAbd').value=''">✕</button>
+          </div>
           <label>Extremities</label>
-          <input type="text" id="aExt" placeholder="+ pitting edema bilateral lower extremities">
+          <div class="input-clear-row">
+            <input type="text" id="aExt" list="extList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aExt').value=''">✕</button>
+          </div>
           <label>Neuro</label>
-          <input type="text" id="aNeuro" placeholder="alert and oriented x3, GCS 15">
+          <div class="input-clear-row">
+            <input type="text" id="aNeuro" list="neuroList" placeholder="Pick from list or type…">
+            <button type="button" class="clear-btn" onclick="$('aNeuro').value=''">✕</button>
+          </div>
         </div>
       </details>
     </fieldset>
@@ -654,6 +745,59 @@
           <input type="text" id="rsi" placeholder="Etomidate 0.3 mg/kg, Rocuronium 1 mg/kg">
           <label>Sedation Drips (if intubated)</label>
           <input type="text" id="sedation" placeholder="Propofol 30 mcg/kg/min; Fentanyl 1 mcg/kg/hr">
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
+        <summary>ICU Drip Calculator</summary>
+        <div class="fieldset-body">
+          <div class="hint">Pick a drug → standard concentration auto-fills → enter weight (if weight-based) and dose → mL/hr calculates → "Add" appends to the Drips field above.</div>
+          <div class="row">
+            <div><label>Patient Weight (kg)</label>
+              <input type="number" id="dripWeight" step="0.1" placeholder="70">
+            </div>
+            <div><label>Drug</label>
+              <select id="dripDrug" onchange="onDripDrugChange()">
+                <option value="">— Select drug —</option>
+              </select>
+            </div>
+          </div>
+          <div class="row-3">
+            <div><label>Concentration</label>
+              <input type="text" id="dripConc" placeholder="e.g., 16 mg / 250 mL">
+            </div>
+            <div><label>Dose</label>
+              <input type="number" id="dripDose" step="any" placeholder="0.05" oninput="calcDripRate()">
+            </div>
+            <div><label>Units</label>
+              <select id="dripUnit" onchange="calcDripRate()">
+                <option value="mcg/min">mcg/min</option>
+                <option value="mcg/kg/min">mcg/kg/min</option>
+                <option value="mg/min">mg/min</option>
+                <option value="mg/hr">mg/hr</option>
+                <option value="mg/kg/hr">mg/kg/hr</option>
+                <option value="mcg/kg/hr">mcg/kg/hr</option>
+                <option value="U/hr">U/hr</option>
+                <option value="U/min">U/min</option>
+                <option value="U/kg/hr">U/kg/hr</option>
+                <option value="mU/min">mU/min</option>
+                <option value="g/hr">g/hr</option>
+                <option value="ng/kg/min">ng/kg/min</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div><label>Calculated rate (mL/hr)</label>
+              <input type="text" id="dripRate" readonly placeholder="—" style="background:#f1f5f9;font-weight:700">
+            </div>
+            <div style="display:flex;align-items:end;gap:6px">
+              <button type="button" class="calc-btn" style="margin:0;flex:1" onclick="addDripToList()">+ Add to Drips</button>
+              <button type="button" class="clear-btn" onclick="clearDripCalc()">✕</button>
+            </div>
+          </div>
+          <div id="dripWarn" class="hint" style="color:#991b1b"></div>
         </div>
       </details>
     </fieldset>
@@ -710,6 +854,43 @@
 
           <label>Why Air vs Ground (factors)</label>
           <textarea id="airReason" placeholder="Time-sensitive surgical urgency; CCN-level monitoring not available on regional ground ALS; significant time savings"></textarea>
+
+          <label>Ground Transport Justification (insurance-accepted reason; pick one or more)</label>
+          <select id="groundReason" onchange="addGroundReason()">
+            <option value="">— Pick to add to justification —</option>
+            <optgroup label="Weather / Operational">
+              <option>All regional air assets grounded due to weather (ceiling/visibility below VFR/IFR minimums)</option>
+              <option>Helicopter mechanical / maintenance grounding</option>
+              <option>Night IFR operating limits exceed safe envelope at receiving LZ</option>
+              <option>Lightning / thunderstorm activity along flight corridor</option>
+              <option>Icing conditions exceed aircraft capability</option>
+            </optgroup>
+            <optgroup label="Patient-related clinical factors">
+              <option>Patient body habitus / weight exceeds aircraft stretcher or weight-and-balance limits</option>
+              <option>Patient requires therapy not supported in-flight (e.g., IABP, Impella, ECMO without flight team)</option>
+              <option>Patient too unstable for altitude (severe air-trapping, untreated PTX, severe decompression risk)</option>
+              <option>Active combative behavior with ineffective chemical restraint</option>
+              <option>Open or partially treated pneumothorax without chest tube</option>
+              <option>Severe hypoxia refractory to maximal vent settings</option>
+              <option>Recent dive injury / decompression sickness (altitude contraindicated)</option>
+              <option>Bowel obstruction with risk of altitude-related expansion</option>
+            </optgroup>
+            <optgroup label="Distance / time factors">
+              <option>Ground transport time savings negligible due to short distance (&lt; 45 ground miles)</option>
+              <option>Receiving facility lacks suitable LZ; ground transfer from LZ would negate time savings</option>
+              <option>Urban traffic and proximity to receiving facility make ground equal or faster</option>
+            </optgroup>
+            <optgroup label="Family / patient factors">
+              <option>Patient or legally authorized representative declined air transport</option>
+              <option>Religious or cultural objection to air transport documented</option>
+            </optgroup>
+            <optgroup label="Receiving facility factors">
+              <option>Receiving facility's helipad closed / under maintenance</option>
+              <option>Receiving facility requested ground due to ED diversion of air arrivals</option>
+            </optgroup>
+          </select>
+          <textarea id="groundReasonText" rows="3" placeholder="Selected reasons appear here. Edit freely."></textarea>
+          <button type="button" class="add-btn" onclick="$('groundReasonText').value=''" style="background:#fee2e2;color:#991b1b;border-color:#fecaca">Clear ground reasons</button>
         </div>
       </details>
     </fieldset>
@@ -867,6 +1048,171 @@
   <option value="Other / Custom (type below)">
 </datalist>
 
+<!-- Physical assessment datalists -->
+<datalist id="skinList">
+  <option value="warm, dry, intact">
+  <option value="warm, dry, pink">
+  <option value="cool, dry">
+  <option value="cool to the touch, mild diaphoresis">
+  <option value="cool, pale, diaphoretic">
+  <option value="cold, mottled extremities">
+  <option value="hot, dry">
+  <option value="hot, flushed, diaphoretic">
+  <option value="pale, clammy">
+  <option value="cyanotic peripherally">
+  <option value="jaundiced">
+  <option value="multiple abrasions/contusions noted">
+  <option value="burns noted (see body diagram)">
+  <option value="rash noted">
+</datalist>
+<datalist id="pupilList">
+  <option value="PERRLA 3 mm bilaterally">
+  <option value="PERRLA 2 mm bilaterally">
+  <option value="PERRLA 4 mm bilaterally">
+  <option value="pinpoint bilaterally">
+  <option value="dilated, sluggish bilaterally">
+  <option value="fixed and dilated bilaterally">
+  <option value="anisocoria (R > L)">
+  <option value="anisocoria (L > R)">
+  <option value="R blown pupil">
+  <option value="L blown pupil">
+  <option value="closed; unable to assess (sedated)">
+</datalist>
+<datalist id="headList">
+  <option value="atraumatic, normocephalic, trachea midline">
+  <option value="atraumatic, trachea midline">
+  <option value="ETT in place, secured at the lip, trachea midline">
+  <option value="C-collar in place">
+  <option value="C-collar in place, no obvious deformity">
+  <option value="scalp laceration noted">
+  <option value="hematoma to the head">
+  <option value="raccoon eyes / Battle's sign">
+  <option value="LeFort fracture pattern">
+  <option value="JVD noted">
+  <option value="tracheal deviation noted">
+</datalist>
+<datalist id="cardiacList">
+  <option value="sinus rhythm, no ectopy, no JVD">
+  <option value="sinus tachycardia, no ectopy">
+  <option value="sinus bradycardia">
+  <option value="normal sinus rhythm">
+  <option value="atrial fibrillation with RVR">
+  <option value="atrial fibrillation, rate controlled">
+  <option value="atrial flutter">
+  <option value="SVT">
+  <option value="ventricular tachycardia">
+  <option value="STEMI pattern on 12-lead">
+  <option value="ST depression on 12-lead">
+  <option value="paced rhythm">
+  <option value="PEA / asystole during transport">
+  <option value="murmur auscultated">
+  <option value="JVD noted">
+</datalist>
+<datalist id="lungsList">
+  <option value="clear bilaterally">
+  <option value="clear bilaterally, equal chest rise">
+  <option value="diminished bilaterally">
+  <option value="diminished at the bases">
+  <option value="coarse rales and crackles bilaterally">
+  <option value="rales at the bases">
+  <option value="expiratory wheezes bilaterally">
+  <option value="inspiratory and expiratory wheezes">
+  <option value="rhonchi bilaterally">
+  <option value="absent breath sounds on R">
+  <option value="absent breath sounds on L">
+  <option value="ventilated; equal chest rise, no resistance">
+  <option value="ventilated; high peak pressures noted">
+</datalist>
+<datalist id="abdList">
+  <option value="soft, non-tender, non-distended">
+  <option value="soft, non-tender">
+  <option value="tender to palpation in RUQ">
+  <option value="tender to palpation in LUQ">
+  <option value="tender to palpation in RLQ">
+  <option value="tender to palpation in LLQ">
+  <option value="diffusely tender to palpation">
+  <option value="distended, tender to palpation diffusely">
+  <option value="severely distended, tender to palpation diffusely">
+  <option value="rigid, peritoneal signs">
+  <option value="surgical scars noted">
+  <option value="ostomy in place">
+  <option value="G-tube / PEG in place">
+  <option value="positive seatbelt sign">
+  <option value="gravid">
+</datalist>
+<datalist id="extList">
+  <option value="moves all extremities, no deformity">
+  <option value="no edema, no deformity">
+  <option value="+1 pitting edema bilateral lower extremities">
+  <option value="+2 pitting edema bilateral lower extremities">
+  <option value="+3 pitting edema bilateral lower extremities">
+  <option value="+4 pitting edema bilateral lower extremities">
+  <option value="anasarca">
+  <option value="pulses 2+ x4, cap refill < 2 sec">
+  <option value="pulses diminished in lower extremities">
+  <option value="cool, mottled distal extremities">
+  <option value="R lower extremity deformity, pulses intact">
+  <option value="L lower extremity deformity, pulses intact">
+  <option value="R upper extremity deformity, pulses intact">
+  <option value="L upper extremity deformity, pulses intact">
+  <option value="amputation noted (see narrative)">
+  <option value="tourniquet in place (location/time per narrative)">
+</datalist>
+<datalist id="neuroList">
+  <option value="alert and oriented x4, GCS 15">
+  <option value="alert and oriented x3, GCS 15">
+  <option value="alert and oriented x2 (person, place)">
+  <option value="alert and oriented x1 (person only)">
+  <option value="confused, GCS 14">
+  <option value="lethargic but arousable to voice">
+  <option value="responsive to painful stimuli only">
+  <option value="unresponsive, GCS 3">
+  <option value="sedated (per drips), RASS as documented">
+  <option value="intubated and sedated; unable to assess">
+  <option value="seizure activity noted">
+  <option value="post-ictal">
+  <option value="left-sided hemiparesis">
+  <option value="right-sided hemiparesis">
+  <option value="aphasic">
+  <option value="dysarthric">
+  <option value="LAMS score documented; LVO concern">
+</datalist>
+
+<!-- Indiana Counties datalist (for scene county field) -->
+<datalist id="countyList">
+  <option value="Adams County"><option value="Allen County"><option value="Bartholomew County">
+  <option value="Benton County"><option value="Blackford County"><option value="Boone County">
+  <option value="Brown County"><option value="Carroll County"><option value="Cass County">
+  <option value="Clark County"><option value="Clay County"><option value="Clinton County">
+  <option value="Crawford County"><option value="Daviess County"><option value="Dearborn County">
+  <option value="Decatur County"><option value="DeKalb County"><option value="Delaware County">
+  <option value="Dubois County"><option value="Elkhart County"><option value="Fayette County">
+  <option value="Floyd County"><option value="Fountain County"><option value="Franklin County">
+  <option value="Fulton County"><option value="Gibson County"><option value="Grant County">
+  <option value="Greene County"><option value="Hamilton County"><option value="Hancock County">
+  <option value="Harrison County"><option value="Hendricks County"><option value="Henry County">
+  <option value="Howard County"><option value="Huntington County"><option value="Jackson County">
+  <option value="Jasper County"><option value="Jay County"><option value="Jefferson County">
+  <option value="Jennings County"><option value="Johnson County"><option value="Knox County">
+  <option value="Kosciusko County"><option value="LaGrange County"><option value="Lake County">
+  <option value="LaPorte County"><option value="Lawrence County"><option value="Madison County">
+  <option value="Marion County"><option value="Marshall County"><option value="Martin County">
+  <option value="Miami County"><option value="Monroe County"><option value="Montgomery County">
+  <option value="Morgan County"><option value="Newton County"><option value="Noble County">
+  <option value="Ohio County"><option value="Orange County"><option value="Owen County">
+  <option value="Parke County"><option value="Perry County"><option value="Pike County">
+  <option value="Porter County"><option value="Posey County"><option value="Pulaski County">
+  <option value="Putnam County"><option value="Randolph County"><option value="Ripley County">
+  <option value="Rush County"><option value="Scott County"><option value="Shelby County">
+  <option value="Spencer County"><option value="Starke County"><option value="Steuben County">
+  <option value="St. Joseph County"><option value="Sullivan County"><option value="Switzerland County">
+  <option value="Tippecanoe County"><option value="Tipton County"><option value="Union County">
+  <option value="Vanderburgh County"><option value="Vermillion County"><option value="Vigo County">
+  <option value="Wabash County"><option value="Warren County"><option value="Warrick County">
+  <option value="Washington County"><option value="Wayne County"><option value="Wells County">
+  <option value="White County"><option value="Whitley County">
+</datalist>
+
 <!-- Indiana Counties (EMS) datalist -->
 <datalist id="emsList">
   <option value="Adams County EMS">
@@ -1002,6 +1348,41 @@
   function $(id){ return document.getElementById(id); }
   function val(id){ return ($(id) && $(id).value) ? $(id).value.trim() : ''; }
 
+  // Combine "Name" + credentials select into "Name, CRED" (or "" if no name)
+  function nameCred(baseId){
+    const n = val(baseId + 'Name');
+    const c = val(baseId + 'Cred');
+    if (!n) return '';
+    return c ? `${n}, ${c}` : n;
+  }
+  function clearNameCred(baseId){
+    if ($(baseId + 'Name')) $(baseId + 'Name').value = '';
+    const sel = $(baseId + 'Cred');
+    if (sel) sel.selectedIndex = 0;
+  }
+  // Parse "Name, CRED" → { name, cred }. Returns null if no match.
+  function parseNameCred(combined, validCreds){
+    if (!combined) return null;
+    const m = combined.match(/^(.+?)[,\s]+([A-Za-z\-]+)\s*$/);
+    if (m && validCreds.includes(m[2].toUpperCase())) {
+      return { name: m[1].trim(), cred: m[2].toUpperCase() };
+    }
+    return { name: combined.trim(), cred: '' };
+  }
+  // Apply a combined "Name, CRED" string to a baseId's split fields, only if name field is empty.
+  function applyNameCred(baseId, combined, validCreds){
+    if (!combined || !$(baseId + 'Name')) return;
+    if ($(baseId + 'Name').value) return;
+    const parsed = parseNameCred(combined, validCreds);
+    if (!parsed) return;
+    $(baseId + 'Name').value = parsed.name;
+    if (parsed.cred && $(baseId + 'Cred')) {
+      const sel = $(baseId + 'Cred');
+      const opt = Array.from(sel.options).find(o => o.value.toUpperCase().startsWith(parsed.cred));
+      if (opt) sel.value = opt.value;
+    }
+  }
+
   // Settings
   function loadSettings(){
     return {
@@ -1088,6 +1469,196 @@
   // Time-sensitive flags
   function gatherTSFlags(){
     return Array.from(document.querySelectorAll('.ts-flag:checked')).map(c => c.value);
+  }
+
+  // ====== ICU Drip Calculator ======
+  // Standard adult ICU drip concentrations and dosing. Concentrations are typical
+  // "off-the-shelf" or commonly-mixed bags; users can edit if their facility uses
+  // a different mix. Dose units listed match the most common clinical convention.
+  const DRIP_DB = [
+    // Vasopressors / inotropes
+    { name: 'Norepinephrine (Levophed)', mg: 16, ml: 250, defaultUnit: 'mcg/min', units: ['mcg/min','mcg/kg/min'] },
+    { name: 'Epinephrine', mg: 4, ml: 250, defaultUnit: 'mcg/min', units: ['mcg/min','mcg/kg/min'] },
+    { name: 'Phenylephrine (Neo-Synephrine)', mg: 50, ml: 250, defaultUnit: 'mcg/min', units: ['mcg/min','mcg/kg/min'] },
+    { name: 'Vasopressin', units_total: 40, ml: 100, defaultUnit: 'U/min', units: ['U/min','U/hr'] },
+    { name: 'Dopamine', mg: 400, ml: 250, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Dobutamine', mg: 500, ml: 250, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Milrinone', mg: 20, ml: 100, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Isoproterenol (Isuprel)', mg: 2, ml: 250, defaultUnit: 'mcg/min', units: ['mcg/min','mcg/kg/min'] },
+    // Sedation / analgesia
+    { name: 'Propofol', mg: 1000, ml: 100, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min','mg/kg/hr'] },
+    { name: 'Fentanyl', mg: 2.5, ml: 250, defaultUnit: 'mcg/hr', units: ['mcg/hr','mcg/kg/hr'] },
+    { name: 'Midazolam (Versed)', mg: 100, ml: 100, defaultUnit: 'mg/hr', units: ['mg/hr','mg/kg/hr'] },
+    { name: 'Ketamine', mg: 500, ml: 100, defaultUnit: 'mg/kg/hr', units: ['mg/kg/hr','mcg/kg/min'] },
+    { name: 'Dexmedetomidine (Precedex)', mg: 0.4, ml: 100, defaultUnit: 'mcg/kg/hr', units: ['mcg/kg/hr'] },
+    { name: 'Morphine', mg: 100, ml: 100, defaultUnit: 'mg/hr', units: ['mg/hr'] },
+    { name: 'Hydromorphone (Dilaudid)', mg: 20, ml: 100, defaultUnit: 'mg/hr', units: ['mg/hr'] },
+    { name: 'Remifentanil', mg: 5, ml: 100, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    // Antihypertensives / cardiac
+    { name: 'Nitroglycerin', mg: 50, ml: 250, defaultUnit: 'mcg/min', units: ['mcg/min','mcg/kg/min'] },
+    { name: 'Nicardipine (Cardene)', mg: 25, ml: 250, defaultUnit: 'mg/hr', units: ['mg/hr'] },
+    { name: 'Clevidipine (Cleviprex)', mg: 50, ml: 100, defaultUnit: 'mg/hr', units: ['mg/hr'] },
+    { name: 'Nitroprusside (Nipride)', mg: 50, ml: 250, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Esmolol (Brevibloc)', mg: 2500, ml: 250, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Labetalol', mg: 200, ml: 200, defaultUnit: 'mg/min', units: ['mg/min','mg/hr'] },
+    { name: 'Diltiazem (Cardizem)', mg: 125, ml: 125, defaultUnit: 'mg/hr', units: ['mg/hr'] },
+    { name: 'Amiodarone', mg: 450, ml: 250, defaultUnit: 'mg/min', units: ['mg/min','mg/hr'] },
+    { name: 'Lidocaine', mg: 2000, ml: 500, defaultUnit: 'mg/min', units: ['mg/min'] },
+    { name: 'Procainamide', mg: 1000, ml: 250, defaultUnit: 'mg/min', units: ['mg/min'] },
+    // Anticoagulants
+    { name: 'Heparin', units_total: 25000, ml: 250, defaultUnit: 'U/kg/hr', units: ['U/kg/hr','U/hr'] },
+    { name: 'Bivalirudin (Angiomax)', mg: 250, ml: 250, defaultUnit: 'mg/kg/hr', units: ['mg/kg/hr'] },
+    { name: 'Argatroban', mg: 100, ml: 100, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Cangrelor (Kengreal)', mg: 50, ml: 250, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    // Paralytics
+    { name: 'Vecuronium', mg: 20, ml: 100, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Cisatracurium (Nimbex)', mg: 200, ml: 100, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    { name: 'Rocuronium', mg: 500, ml: 100, defaultUnit: 'mcg/kg/min', units: ['mcg/kg/min'] },
+    // Endocrine / electrolytes
+    { name: 'Insulin (regular)', units_total: 100, ml: 100, defaultUnit: 'U/hr', units: ['U/hr'] },
+    { name: 'Octreotide', mg: 0.5, ml: 250, defaultUnit: 'mcg/hr', units: ['mcg/hr'] },
+    { name: 'Magnesium Sulfate', g: 40, ml: 1000, defaultUnit: 'g/hr', units: ['g/hr'] },
+    { name: 'Calcium Gluconate', g: 4, ml: 250, defaultUnit: 'g/hr', units: ['g/hr'] },
+    // OB
+    { name: 'Oxytocin (Pitocin)', units_total: 30, ml: 500, defaultUnit: 'mU/min', units: ['mU/min'] },
+    { name: 'Terbutaline', mg: 5, ml: 250, defaultUnit: 'mcg/min', units: ['mcg/min'] },
+    // GI
+    { name: 'Pantoprazole (Protonix)', mg: 80, ml: 100, defaultUnit: 'mg/hr', units: ['mg/hr'] },
+    // Pulmonary
+    { name: 'Epoprostenol (Flolan)', mg: 1.5, ml: 100, defaultUnit: 'ng/kg/min', units: ['ng/kg/min'] },
+    // Antibiotics commonly run as drips
+    { name: 'Vancomycin', mg: 1000, ml: 250, defaultUnit: 'mg/hr', units: ['mg/hr'] },
+  ];
+  // Populate drug dropdown on load
+  (function initDripDb(){
+    const sel = $('dripDrug');
+    if (!sel) return;
+    DRIP_DB.forEach((d, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = d.name;
+      sel.appendChild(opt);
+    });
+  })();
+  function dripConcLabel(d){
+    if (d.mg != null) return `${d.mg} mg / ${d.ml} mL`;
+    if (d.units_total != null) return `${d.units_total} units / ${d.ml} mL`;
+    if (d.g != null) return `${d.g} g / ${d.ml} mL`;
+    return '';
+  }
+  // Returns mg per mL, mcg per mL, or U per mL depending on drug's stored amount.
+  function dripMgPerMl(d){ return d.mg != null ? d.mg / d.ml : null; }
+  function dripMcgPerMl(d){ return d.mg != null ? (d.mg * 1000) / d.ml : null; }
+  function dripUnitsPerMl(d){ return d.units_total != null ? d.units_total / d.ml : null; }
+  function dripGPerMl(d){ return d.g != null ? d.g / d.ml : null; }
+  function onDripDrugChange(){
+    const sel = $('dripDrug');
+    if (!sel.value) {
+      $('dripConc').value = '';
+      $('dripRate').value = '';
+      $('dripWarn').textContent = '';
+      return;
+    }
+    const d = DRIP_DB[parseInt(sel.value)];
+    $('dripConc').value = dripConcLabel(d);
+    // Reset unit dropdown to drug's allowed units (others stay available but warn if not standard)
+    const unitSel = $('dripUnit');
+    unitSel.value = d.defaultUnit;
+    calcDripRate();
+  }
+  function calcDripRate(){
+    const sel = $('dripDrug');
+    const out = $('dripRate');
+    const warn = $('dripWarn');
+    warn.textContent = '';
+    if (!sel.value) { out.value = ''; return; }
+    const d = DRIP_DB[parseInt(sel.value)];
+    const dose = parseFloat(val('dripDose'));
+    const unit = val('dripUnit');
+    const weight = parseFloat(val('dripWeight'));
+    if (isNaN(dose) || dose <= 0) { out.value = ''; return; }
+    const needsWeight = /\/kg\//.test(unit);
+    if (needsWeight && (isNaN(weight) || weight <= 0)) {
+      out.value = '';
+      warn.textContent = 'Weight required for weight-based unit (' + unit + ').';
+      return;
+    }
+    if (!d.units.includes(unit)) {
+      warn.textContent = 'Note: ' + unit + ' is not a standard unit for ' + d.name + '.';
+    }
+    // Convert dose → mass (or units) per minute
+    let perMinute; let kind;
+    const w = weight || 1;
+    switch (unit) {
+      case 'mcg/min': perMinute = dose; kind = 'mcg'; break;
+      case 'mcg/kg/min': perMinute = dose * w; kind = 'mcg'; break;
+      case 'mg/min': perMinute = dose; kind = 'mg'; break;
+      case 'mg/hr': perMinute = dose / 60; kind = 'mg'; break;
+      case 'mg/kg/hr': perMinute = (dose * w) / 60; kind = 'mg'; break;
+      case 'mcg/hr': perMinute = dose / 60; kind = 'mcg'; break;
+      case 'mcg/kg/hr': perMinute = (dose * w) / 60; kind = 'mcg'; break;
+      case 'U/hr': perMinute = dose / 60; kind = 'U'; break;
+      case 'U/min': perMinute = dose; kind = 'U'; break;
+      case 'U/kg/hr': perMinute = (dose * w) / 60; kind = 'U'; break;
+      case 'mU/min': perMinute = dose / 1000; kind = 'U'; break;
+      case 'g/hr': perMinute = dose / 60; kind = 'g'; break;
+      case 'ng/kg/min': perMinute = (dose * w) / 1000; kind = 'mcg'; break;
+      default: out.value = ''; warn.textContent = 'Unsupported unit.'; return;
+    }
+    let perMl;
+    if (kind === 'mcg') perMl = dripMcgPerMl(d);
+    else if (kind === 'mg') perMl = dripMgPerMl(d);
+    else if (kind === 'U') perMl = dripUnitsPerMl(d);
+    else if (kind === 'g') perMl = dripGPerMl(d);
+    if (perMl == null) {
+      out.value = '';
+      warn.textContent = 'Cannot compute: drug concentration not compatible with selected units (' + unit + ').';
+      return;
+    }
+    const mlPerMin = perMinute / perMl;
+    const mlPerHr = mlPerMin * 60;
+    out.value = mlPerHr.toFixed(2);
+  }
+  function addDripToList(){
+    const sel = $('dripDrug');
+    if (!sel.value) return;
+    const d = DRIP_DB[parseInt(sel.value)];
+    const dose = val('dripDose');
+    const unit = val('dripUnit');
+    const rate = val('dripRate');
+    if (!dose || !rate) {
+      $('dripWarn').textContent = 'Enter a dose first.';
+      return;
+    }
+    const line = `${d.name} ${dose} ${unit} (${dripConcLabel(d)}) @ ${rate} mL/hr`;
+    const drips = $('drips');
+    drips.value = drips.value.trim() ? drips.value.trim() + '\n' + line : line;
+    // Reset dose for next entry
+    $('dripDose').value = '';
+    $('dripRate').value = '';
+  }
+  function clearDripCalc(){
+    $('dripDrug').selectedIndex = 0;
+    $('dripConc').value = '';
+    $('dripDose').value = '';
+    $('dripRate').value = '';
+    $('dripWarn').textContent = '';
+  }
+
+  // Ground transport reason chooser — appends the selected option as a bullet line.
+  function addGroundReason(){
+    const sel = $('groundReason');
+    const txt = $('groundReasonText');
+    const v = sel.value;
+    if (!v) return;
+    const existing = txt.value.trim();
+    const line = '• ' + v;
+    if (existing.includes(v)) {
+      sel.selectedIndex = 0;
+      return;
+    }
+    txt.value = existing ? existing + '\n' + line : line;
+    sel.selectedIndex = 0;
   }
 
   // ====== Distance calculation ======
@@ -1247,12 +1818,15 @@
       patient: { age: val('ptAge'), sex: val('ptSex'), mrn: val('ptMRN') },
       sending: mode === 'ift'
         ? { hospital: val('sendHospName'), address: val('sendHospAddr'),
-            nurse: val('sendNurse'), md: val('sendMD') }
-        : { agency: val('sceneAgency'), provider: val('sceneProv'),
+            nurse: nameCred('sendNurse'), md: nameCred('sendMD') }
+        : { agency: val('sceneAgency'), county: val('sceneCounty'),
+            ambulance: val('sceneAmbulance'),
+            crew1: nameCred('sceneCrew1'), crew2: nameCred('sceneCrew2'),
+            provider: nameCred('sceneCrew1'),
             location: val('sceneLoc'), lat: val('sceneLat'), lon: val('sceneLon'),
             mechanism: val('sceneMech') },
       receiving: { hospital: val('recvHosp'), address: val('recvAddr'),
-                   md: val('recvMD'), unit: val('recvUnit'), service: val('recvSvc') },
+                   md: nameCred('recvMD'), unit: val('recvUnit'), service: val('recvSvc') },
       diagnosis: val('diagnosis'),
       timeFlags: gatherTSFlags(),
       servicesUnavail: val('servicesUnavail'),
@@ -1280,6 +1854,7 @@
                   dAir: val('dAir'), tAir: val('tAir') },
       bypass: val('bypass'),
       airReason: val('airReason'),
+      groundReason: val('groundReasonText'),
       belongings: val('belongings'),
       briefed: val('briefed'),
     };
@@ -1666,8 +2241,9 @@ Schema:
   "patient": { "age": "", "sex": "Male|Female|Other", "mrn": "" },
   "callType": "ift|scene",
   "sending": {
-    "hospital": "", "address": "", "nurse": "", "md": "",
-    "agency": "", "provider": "",
+    "hospital": "", "address": "", "nurse": "Name, CRED", "md": "Name, CRED",
+    "agency": "", "county": "", "ambulance": "",
+    "crew1": "Name, PARAMEDIC|EMT", "crew2": "Name, PARAMEDIC|EMT",
     "location": "", "lat": "", "lon": "",
     "mechanism": ""
   },
@@ -1742,10 +2318,13 @@ ${transcript}`;
     if (d.sending) {
       setIf('sendHospName', d.sending.hospital);
       setIf('sendHospAddr', d.sending.address);
-      setIf('sendNurse', d.sending.nurse);
-      setIf('sendMD', d.sending.md);
+      applyNameCred('sendNurse', d.sending.nurse, ['RN','BSN','MSN','LPN']);
+      applyNameCred('sendMD', d.sending.md, ['MD','DO','PA','NP','FNP']);
       setIf('sceneAgency', d.sending.agency);
-      setIf('sceneProv', d.sending.provider);
+      setIf('sceneCounty', d.sending.county);
+      setIf('sceneAmbulance', d.sending.ambulance);
+      applyNameCred('sceneCrew1', d.sending.crew1 || d.sending.provider, ['PARAMEDIC','EMT','AEMT','EMR']);
+      applyNameCred('sceneCrew2', d.sending.crew2, ['PARAMEDIC','EMT','AEMT','EMR']);
       setIf('sceneLoc', d.sending.location);
       setIf('sceneLat', d.sending.lat);
       setIf('sceneLon', d.sending.lon);
@@ -1754,7 +2333,7 @@ ${transcript}`;
     if (d.receiving) {
       setIf('recvHosp', d.receiving.hospital);
       setIf('recvAddr', d.receiving.address);
-      setIf('recvMD', d.receiving.md);
+      applyNameCred('recvMD', d.receiving.md, ['MD','DO','PA','NP','FNP']);
       setIf('recvUnit', d.receiving.unit);
       setIf('recvSvc', d.receiving.service);
     }
