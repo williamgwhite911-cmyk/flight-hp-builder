@@ -323,6 +323,111 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* ICD-10 search */
+  .icd-search-wrap { position: relative; }
+  .icd-results {
+    display: none;
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    max-height: 260px;
+    overflow-y: auto;
+    z-index: 30;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .icd-results.show { display: block; }
+  .icd-result {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .icd-result:hover { background: #f0f9ff; }
+  .icd-result .code { font-weight: 700; color: #0c4a6e; margin-right: 8px; }
+  .icd-result .name { color: #334155; }
+  .icd-result.empty { color: #94a3b8; cursor: default; padding: 12px; }
+  .icd-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    min-height: 4px;
+  }
+  .icd-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e0f2fe;
+    border: 1px solid #7dd3fc;
+    color: #075985;
+    border-radius: 999px;
+    padding: 4px 6px 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    max-width: 100%;
+  }
+  .icd-chip .chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+  }
+  .icd-chip button {
+    background: #bae6fd;
+    border: none;
+    color: #0c4a6e;
+    border-radius: 999px;
+    width: 20px; height: 20px;
+    cursor: pointer;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0;
+  }
+  .icd-chip button:hover { background: #7dd3fc; }
+  /* Medication summary (Phase 3b) */
+  .med-summary {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #0f172a;
+    min-height: 40px;
+  }
+  .med-summary table { width: 100%; border-collapse: collapse; }
+  .med-summary th, .med-summary td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 12px;
+    vertical-align: top;
+  }
+  .med-summary th {
+    background: #f1f5f9; color: #0c4a6e;
+    font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; font-size: 11px;
+  }
+  .med-summary .empty { color: #94a3b8; font-style: italic; }
+
+  /* Treatment summary card (Phase 3a) */
+  .tx-summary {
+    background: #fefce8;
+    border: 1px solid #fde047;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #713f12;
+    white-space: pre-wrap;
+  }
+  .tx-summary .tx-header { font-weight: 700; margin-bottom: 4px; }
+  .tx-disclaimer { font-size: 11px; color: #92400e; margin-top: 6px; font-style: italic; }
+
   /* Distance display */
   .distance-card {
     background: #f0f9ff;
@@ -604,8 +709,18 @@
       <details>
         <summary>Diagnosis & Time-Sensitivity</summary>
         <div class="fieldset-body">
-          <label>Confirmed Diagnosis (IFT) or Working Diagnosis (Scene)</label>
-          <textarea id="diagnosis" placeholder="Pneumoperitoneum, suspected recurrent perforated duodenal ulcer (prior endoscopic clipping 01/2026)"></textarea>
+          <label>ICD-10 Search (live, via NIH Clinical Tables)</label>
+          <div class="icd-search-wrap">
+            <input type="text" id="icdSearch" placeholder="Type at least 2 letters (e.g., 'pneumoperitoneum', 'STEMI', 'K26')" autocomplete="off">
+            <div id="icdResults" class="icd-results"></div>
+          </div>
+          <div id="icdChips" class="icd-chips"></div>
+          <div class="hint">Click a result to add it. Codes appear as chips and are included with the diagnosis text below.</div>
+          <button type="button" class="calc-btn" onclick="getTreatmentSummary()" style="margin-top:8px">🩺 Get AI Treatment Summary (separate from narrative)</button>
+          <div id="txSummary"></div>
+
+          <label>Additional Free-Text Diagnosis / Notes</label>
+          <textarea id="diagnosis" placeholder="Add free-text notes here. ICD-10 chips above are merged automatically when the H&P is generated."></textarea>
           <label>Time-Sensitive Conditions (check all that apply)</label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">
             <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="STEMI"> STEMI</label>
@@ -729,6 +844,11 @@
         <div class="fieldset-body">
           <div id="ivList"></div>
           <button class="add-btn" type="button" onclick="addIvLine()">+ Add IV line</button>
+          <div class="ocr-block" id="ocrBlockIv" style="display:none;margin-top:8px">
+            <label class="ocr-label" for="ocrIvFile">📷 Pump screen photo (pilot) — cover patient identifiers first</label>
+            <input type="file" id="ocrIvFile" accept="image/*" capture="environment" onchange="handlePumpPhoto(event)">
+            <div id="ocrIvStatus" class="hint"></div>
+          </div>
         </div>
       </details>
     </fieldset>
@@ -829,6 +949,11 @@
             </div>
             <label>Pressure Support</label>
             <input type="text" id="vPS" placeholder="10">
+          </div>
+          <div class="ocr-block" id="ocrBlockVent" style="display:none;margin-top:8px">
+            <label class="ocr-label" for="ocrVentFile">📷 Vent screen photo (pilot) — cover patient identifiers first</label>
+            <input type="file" id="ocrVentFile" accept="image/*" capture="environment" onchange="handleVentPhoto(event)">
+            <div id="ocrVentStatus" class="hint"></div>
           </div>
         </div>
       </details>
@@ -942,6 +1067,11 @@
     <div class="output-card">
       <h3>Page 2: StatFlight Template</h3>
       <div class="narrative" id="templateOut" contenteditable="true">Click "Generate" to build the structured template here.</div>
+    </div>
+
+    <div class="output-card">
+      <h3>Medication Summary <button class="copy-narrative" style="font-size:11px;padding:6px 10px" onclick="copyMedSummary(this)" type="button">Copy</button></h3>
+      <div id="medSummary" class="med-summary">Will be populated when the H&P is generated.</div>
     </div>
   </div>
 </div>
@@ -1337,6 +1467,14 @@
       <option value="claude-opus-4-6">Claude Opus 4.6 (highest quality)</option>
     </select>
 
+    <h3>Pilot features</h3>
+    <label style="display:flex;gap:8px;align-items:center;font-weight:normal;cursor:pointer">
+      <input type="checkbox" id="enablePhotoOcr"> Enable photo OCR for IV pumps and ventilator screens
+    </label>
+    <div class="warning-box">
+      <strong>Pilot use only.</strong> Photos are sent to Claude (Anthropic API) to extract pump/vent settings. <b>Always cover patient name, MRN, or any visible identifiers before photographing.</b> Do not use with live patient data in production until your facility approves.
+    </div>
+
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
       <button class="btn-primary" onclick="saveSettings()">Save</button>
@@ -1389,6 +1527,7 @@
       anthropic: localStorage.getItem('hp_anthropic_key') || '',
       google: localStorage.getItem('hp_google_key') || '',
       model: localStorage.getItem('hp_model') || 'claude-sonnet-4-6',
+      photoOcr: localStorage.getItem('hp_photo_ocr') === '1',
     };
   }
   function openSettings(){
@@ -1396,6 +1535,7 @@
     $('anthropicKey').value = s.anthropic;
     $('googleKey').value = s.google;
     $('modelSelect').value = s.model;
+    $('enablePhotoOcr').checked = s.photoOcr;
     $('settingsModal').classList.add('show');
   }
   function closeSettings(){ $('settingsModal').classList.remove('show'); }
@@ -1403,9 +1543,11 @@
     localStorage.setItem('hp_anthropic_key', $('anthropicKey').value.trim());
     localStorage.setItem('hp_google_key', $('googleKey').value.trim());
     localStorage.setItem('hp_model', $('modelSelect').value);
+    localStorage.setItem('hp_photo_ocr', $('enablePhotoOcr').checked ? '1' : '0');
     closeSettings();
     setStatus('Settings saved.');
     setTimeout(() => setStatus(''), 1500);
+    refreshPhotoOcrUi();
   }
 
   // Tabs (mobile)
@@ -1469,6 +1611,154 @@
   // Time-sensitive flags
   function gatherTSFlags(){
     return Array.from(document.querySelectorAll('.ts-flag:checked')).map(c => c.value);
+  }
+
+  // ====== ICD-10 Search (NIH Clinical Tables) ======
+  // Public, no-auth endpoint. Docs: https://clinicaltables.nlm.nih.gov/apidoc/icd10cm/v3/doc.html
+  const ICD_ENDPOINT = 'https://clinicaltables.nlm.nih.gov/api/icd10cm/v3/search';
+  const icdSelected = []; // [{code, name}]
+  let icdSearchTimer = null;
+  let icdLastQuery = '';
+
+  function renderIcdChips(){
+    const wrap = $('icdChips');
+    wrap.innerHTML = '';
+    icdSelected.forEach((d, idx) => {
+      const chip = document.createElement('span');
+      chip.className = 'icd-chip';
+      const text = document.createElement('span');
+      text.className = 'chip-text';
+      text.title = `${d.code} — ${d.name}`;
+      text.textContent = `${d.code} — ${d.name}`;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '×';
+      btn.title = 'Remove';
+      btn.addEventListener('click', () => {
+        icdSelected.splice(idx, 1);
+        renderIcdChips();
+      });
+      chip.appendChild(text);
+      chip.appendChild(btn);
+      wrap.appendChild(chip);
+    });
+  }
+  function addIcdCode(code, name){
+    if (icdSelected.some(d => d.code === code)) return;
+    icdSelected.push({ code, name });
+    renderIcdChips();
+  }
+  function hideIcdResults(){
+    $('icdResults').classList.remove('show');
+  }
+  async function fetchIcd(query){
+    const url = `${ICD_ENDPOINT}?sf=code,name&terms=${encodeURIComponent(query)}&maxList=20`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('ICD search HTTP ' + res.status);
+    return await res.json(); // [total, [codes], extra, [[code, name], ...]]
+  }
+  function renderIcdResults(rows){
+    const box = $('icdResults');
+    box.innerHTML = '';
+    if (!rows || !rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'icd-result empty';
+      empty.textContent = 'No matches.';
+      box.appendChild(empty);
+    } else {
+      rows.forEach(([code, name]) => {
+        const div = document.createElement('div');
+        div.className = 'icd-result';
+        div.innerHTML = `<span class="code"></span><span class="name"></span>`;
+        div.querySelector('.code').textContent = code;
+        div.querySelector('.name').textContent = name;
+        div.addEventListener('mousedown', e => {
+          e.preventDefault(); // keep focus on input
+          addIcdCode(code, name);
+          $('icdSearch').value = '';
+          hideIcdResults();
+          $('icdSearch').focus();
+        });
+        box.appendChild(div);
+      });
+    }
+    box.classList.add('show');
+  }
+  function setupIcdSearch(){
+    const input = $('icdSearch');
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      icdLastQuery = q;
+      clearTimeout(icdSearchTimer);
+      if (q.length < 2) { hideIcdResults(); return; }
+      icdSearchTimer = setTimeout(async () => {
+        try {
+          const data = await fetchIcd(q);
+          // Ignore stale responses if user kept typing
+          if (icdLastQuery !== q) return;
+          renderIcdResults(data[3] || []);
+        } catch (err) {
+          const box = $('icdResults');
+          box.innerHTML = '<div class="icd-result empty">Search failed: ' + (err.message || err) + '</div>';
+          box.classList.add('show');
+        }
+      }, 220);
+    });
+    input.addEventListener('blur', () => setTimeout(hideIcdResults, 150));
+    input.addEventListener('focus', () => {
+      if (input.value.trim().length >= 2) $('icdResults').classList.add('show');
+    });
+  }
+  setupIcdSearch();
+
+  // ====== AI Treatment Summary (Phase 3a) ======
+  // Returns a brief, non-narrative treatment summary for the selected diagnoses.
+  // Displayed in its own card; intentionally NOT injected into the H&P narrative.
+  async function getTreatmentSummary(){
+    const dx = combinedDiagnosis();
+    const card = $('txSummary');
+    if (!dx) {
+      card.innerHTML = '<div class="tx-summary" style="border-color:#fca5a5;background:#fef2f2;color:#991b1b">Add at least one ICD-10 code or diagnosis text first.</div>';
+      return;
+    }
+    const settings = loadSettings();
+    if (!settings.anthropic) {
+      setStatus('Anthropic API key required for treatment summary.', true);
+      openSettings();
+      return;
+    }
+    card.innerHTML = '<div class="tx-summary"><span class="spinner"></span> Getting treatment summary…</div>';
+    const prompt = `You are assisting a critical-care flight nurse. For the diagnosis/diagnoses below, give a concise treatment summary appropriate for adult transport medicine.
+
+Format:
+- 3 to 6 short bullet points
+- Cover: immediate stabilization priorities, key drips/dosing if relevant, monitoring focus, transport considerations
+- No introduction, no disclaimer text, no markdown headers
+- Use accepted EMS/critical-care abbreviations
+
+Do not give individualized medical advice. This is a clinician reference summary, not a treatment order.
+
+Diagnosis: ${dx}
+
+Return plain text only.`;
+    try {
+      const text = await callAnthropic(prompt);
+      card.innerHTML = `<div class="tx-summary"><div class="tx-header">Treatment summary (reference only — not in H&P narrative)</div>${escapeHtml(text)}<div class="tx-disclaimer">AI-generated; verify against protocol and physician orders. Not patient-specific medical advice.</div></div>`;
+    } catch (err) {
+      card.innerHTML = `<div class="tx-summary" style="border-color:#fca5a5;background:#fef2f2;color:#991b1b">Failed: ${escapeHtml(err.message || String(err))}</div>`;
+    }
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // Combined diagnosis string for AI prompt and outputs.
+  function combinedDiagnosis(){
+    const free = val('diagnosis');
+    if (!icdSelected.length) return free;
+    const list = icdSelected.map(d => `${d.code} ${d.name}`).join('; ');
+    return free ? `${list}; ${free}` : list;
   }
 
   // ====== ICU Drip Calculator ======
@@ -1827,7 +2117,8 @@
             mechanism: val('sceneMech') },
       receiving: { hospital: val('recvHosp'), address: val('recvAddr'),
                    md: nameCred('recvMD'), unit: val('recvUnit'), service: val('recvSvc') },
-      diagnosis: val('diagnosis'),
+      diagnosis: combinedDiagnosis(),
+      icdCodes: icdSelected.slice(),
       timeFlags: gatherTSFlags(),
       servicesUnavail: val('servicesUnavail'),
       acuity: val('acuity'),
@@ -1946,13 +2237,164 @@ CRITICAL INSTRUCTIONS:
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
 - Use professional EMS/clinical language.
 - Do not use em dashes.
-- Return your response as a single JSON object with two keys: "narrative" (the single-paragraph narrative text) and "template" (the formatted template text).
+- Return your response as a single JSON object with THREE keys:
+  - "narrative" (the single-paragraph narrative text)
+  - "template" (the formatted template text)
+  - "medications" (an array of every medication or drip mentioned in meds, drips, rsi, sedation, OR present in the narrative — each item: { "name": "", "dose": "", "concentration": "", "route": "", "time": "", "indication": "", "notes": "" }; only include fields you actually have data for, but always include "name" and "dose"; concentration is only required for drips and should match the standard concentration if known, e.g., "16 mg / 250 mL").
 
 Patient data:
 ${j}
 
 Return ONLY the JSON object, no preamble or markdown fencing.`;
   }
+
+  // ====== Photo OCR (Phase 4 — pilot only) ======
+  function refreshPhotoOcrUi(){
+    const on = loadSettings().photoOcr;
+    const iv = $('ocrBlockIv');
+    const vent = $('ocrBlockVent');
+    if (iv) iv.style.display = on ? 'block' : 'none';
+    if (vent) vent.style.display = on ? 'block' : 'none';
+  }
+  function fileToBase64(file){
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const s = r.result || '';
+        const comma = s.indexOf(',');
+        resolve(comma >= 0 ? s.slice(comma + 1) : s);
+      };
+      r.onerror = () => reject(new Error('Failed to read file'));
+      r.readAsDataURL(file);
+    });
+  }
+  async function callClaudeVision(prompt, file){
+    const settings = loadSettings();
+    if (!settings.anthropic) throw new Error('No API key set. Open Settings.');
+    const b64 = await fileToBase64(file);
+    const media = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': settings.anthropic,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: settings.model,
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: media, data: b64 } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API ${response.status}: ${err.slice(0, 200)}`);
+    }
+    const data = await response.json();
+    if (!data.content || !data.content[0] || !data.content[0].text) {
+      throw new Error('Unexpected API response');
+    }
+    return data.content[0].text.trim();
+  }
+  function confirmPhi(label){
+    return confirm(`PHI WARNING\n\nYou are about to send a ${label} photo to the Claude API.\n\nConfirm you have covered or removed:\n  • Patient name\n  • MRN / patient ID\n  • Date of birth\n  • Any other identifiers visible on the screen\n\nPress OK to proceed, Cancel to abort.`);
+  }
+  async function handlePumpPhoto(event){
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!confirmPhi('IV pump')) { event.target.value = ''; return; }
+    const status = $('ocrIvStatus');
+    status.innerHTML = '<span class="spinner"></span> Extracting pump settings…';
+    status.style.color = '#5b21b6';
+    const prompt = `Examine this photo of an IV infusion pump screen. Extract every infusion currently visible. Return ONLY a JSON object of the form:
+{ "infusions": [ { "drug": "", "concentration": "", "dose": "", "rate_ml_hr": "", "vtbi": "", "channel": "" } ] }
+- "drug": medication name as shown
+- "concentration": as shown on screen if present (e.g., "16 mg / 250 mL")
+- "dose": current dose with units as shown (e.g., "5 mcg/min", "0.05 mcg/kg/min")
+- "rate_ml_hr": current rate in mL/hr (number only)
+- "vtbi": volume to be infused if shown
+- "channel": pump channel/letter if applicable
+Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no markdown.`;
+    try {
+      let text = await callClaudeVision(prompt, file);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const data = JSON.parse(text);
+      const infusions = Array.isArray(data.infusions) ? data.infusions : [];
+      if (!infusions.length) {
+        status.textContent = 'No infusions detected. Try a clearer photo.';
+        status.style.color = '#991b1b';
+        return;
+      }
+      const lines = infusions.map(i => {
+        const parts = [];
+        if (i.drug) parts.push(i.drug);
+        if (i.dose) parts.push(i.dose);
+        if (i.concentration) parts.push(`(${i.concentration})`);
+        if (i.rate_ml_hr) parts.push(`@ ${i.rate_ml_hr} mL/hr`);
+        if (i.channel) parts.push(`[ch ${i.channel}]`);
+        return parts.join(' ');
+      });
+      const drips = $('drips');
+      drips.value = drips.value.trim()
+        ? drips.value.trim() + '\n' + lines.join('\n')
+        : lines.join('\n');
+      status.innerHTML = `✓ Added ${infusions.length} infusion${infusions.length === 1 ? '' : 's'} to Drips. Review for accuracy.`;
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      event.target.value = '';
+    }
+  }
+  async function handleVentPhoto(event){
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!confirmPhi('ventilator')) { event.target.value = ''; return; }
+    const status = $('ocrVentStatus');
+    status.innerHTML = '<span class="spinner"></span> Extracting vent settings…';
+    status.style.color = '#5b21b6';
+    const prompt = `Examine this photo of a mechanical ventilator screen. Extract the current settings. Return ONLY a JSON object:
+{ "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "", "ie_ratio": "", "peak_pressure": "", "plateau_pressure": "", "minute_ventilation": "" }
+- "mode": ventilator mode as shown (e.g., "AC/VC", "PRVC", "SIMV", "CPAP")
+- "fio2": as percentage (e.g., "40%")
+- "tv": tidal volume in mL
+- "rate": set respiratory rate (breaths/min)
+- "peep": PEEP in cmH2O
+- "ps": pressure support in cmH2O
+Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
+    try {
+      let text = await callClaudeVision(prompt, file);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const data = JSON.parse(text);
+      // Ensure vent fields are visible
+      document.querySelector('input[name=vented][value=yes]').checked = true;
+      $('ventFields').style.display = 'block';
+      const setIfFilled = (id, v) => { if (v && $(id)) $(id).value = v; };
+      setIfFilled('vMode', data.mode);
+      setIfFilled('vFiO2', data.fio2);
+      setIfFilled('vTV', data.tv);
+      setIfFilled('vRate', data.rate);
+      setIfFilled('vPEEP', data.peep);
+      setIfFilled('vPS', data.ps);
+      status.innerHTML = '✓ Vent settings populated. Review for accuracy.';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      event.target.value = '';
+    }
+  }
+  // Show/hide on initial load
+  refreshPhotoOcrUi();
 
   // ====== Anthropic API call ======
   async function callAnthropic(prompt){
@@ -2005,6 +2447,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
       $('templateOut').textContent = parsed.template || '';
       $('narrativeOut').classList.add('polished');
       $('templateOut').classList.add('polished');
+      renderMedSummary(parsed.medications);
       runComplianceCheck(data, parsed.narrative || '');
       btn.disabled = false;
       btn.innerHTML = '✨ Regenerate';
@@ -2015,6 +2458,57 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
       btn.innerHTML = '✨ Generate H&P with AI';
       setStatus('Generation failed: ' + (err.message || err), true);
     }
+  }
+
+  // ====== Medication Summary (Phase 3b) ======
+  function renderMedSummary(meds){
+    const box = $('medSummary');
+    if (!Array.isArray(meds) || !meds.length) {
+      box.innerHTML = '<span class="empty">No medications extracted.</span>';
+      return;
+    }
+    // Build table with only the columns that have data in at least one row
+    const cols = [
+      { key: 'name', label: 'Medication' },
+      { key: 'dose', label: 'Dose' },
+      { key: 'concentration', label: 'Concentration' },
+      { key: 'route', label: 'Route' },
+      { key: 'time', label: 'Time' },
+      { key: 'indication', label: 'Indication' },
+      { key: 'notes', label: 'Notes' },
+    ].filter(c => meds.some(m => m && m[c.key] && String(m[c.key]).trim()));
+    const tbl = document.createElement('table');
+    const thead = document.createElement('thead');
+    const trh = document.createElement('tr');
+    cols.forEach(c => { const th = document.createElement('th'); th.textContent = c.label; trh.appendChild(th); });
+    thead.appendChild(trh);
+    tbl.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    meds.forEach(m => {
+      const tr = document.createElement('tr');
+      cols.forEach(c => {
+        const td = document.createElement('td');
+        td.textContent = (m && m[c.key]) ? String(m[c.key]) : '';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    box.innerHTML = '';
+    box.appendChild(tbl);
+  }
+  function copyMedSummary(btn){
+    const tbl = $('medSummary').querySelector('table');
+    if (!tbl) return;
+    const rows = Array.from(tbl.querySelectorAll('tr')).map(tr =>
+      Array.from(tr.querySelectorAll('th,td')).map(c => c.textContent.trim()).join('\t')
+    ).join('\n');
+    navigator.clipboard.writeText(rows).then(() => {
+      const old = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = old; btn.classList.remove('copied'); }, 1500);
+    });
   }
 
   // ====== Compliance check ======
@@ -2089,6 +2583,12 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
     $('templateOut').classList.remove('polished');
     $('complianceList').innerHTML = '';
     $('distanceCard').style.display = 'none';
+    icdSelected.length = 0;
+    renderIcdChips();
+    if ($('icdSearch')) $('icdSearch').value = '';
+    if ($('groundReasonText')) $('groundReasonText').value = '';
+    if ($('txSummary')) $('txSummary').innerHTML = '';
+    if ($('medSummary')) $('medSummary').innerHTML = '';
   }
 
   // ====== Hospital address auto-fill ======
