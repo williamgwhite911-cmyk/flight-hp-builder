@@ -1102,34 +1102,72 @@
     return R * c;
   }
 
-  async function geocode(address, key){
-    const url = 'https://maps.googleapis.com/maps/api/geocode/json?address=' + encodeURIComponent(address) + '&key=' + key;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('Geocode error ' + r.status);
-    const d = await r.json();
-    if (d.status !== 'OK' || !d.results.length) throw new Error('Geocode: ' + d.status);
-    return d.results[0].geometry.location; // {lat, lng}
+  // ====== Google Maps JS SDK loader ======
+  // Loaded once per session, after the user has entered an API key.
+  let mapsSdkLoadPromise = null;
+  function loadMapsSdk(key) {
+    if (window.google && window.google.maps) return Promise.resolve();
+    if (mapsSdkLoadPromise) return mapsSdkLoadPromise;
+    mapsSdkLoadPromise = new Promise((resolve, reject) => {
+      window.__hpMapsLoaded = () => resolve();
+      const s = document.createElement('script');
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=geometry&callback=__hpMapsLoaded`;
+      s.async = true;
+      s.defer = true;
+      s.onerror = () => reject(new Error('Failed to load Google Maps SDK. Check API key, billing, and that "Maps JavaScript API" is enabled.'));
+      document.head.appendChild(s);
+    });
+    return mapsSdkLoadPromise;
   }
 
-  async function distanceMatrix(origin, destination, key){
-    const url = 'https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins=' +
-      encodeURIComponent(origin) + '&destinations=' + encodeURIComponent(destination) + '&key=' + key;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('Distance error ' + r.status);
-    const d = await r.json();
-    if (d.status !== 'OK' || !d.rows.length || !d.rows[0].elements.length) throw new Error('Distance: ' + d.status);
-    const el = d.rows[0].elements[0];
-    if (el.status !== 'OK') throw new Error('Distance: ' + el.status);
-    return {
-      distanceMiles: el.distance.value / 1609.344,
-      durationMin: el.duration.value / 60,
-    };
+  function geocodeSdk(address) {
+    return new Promise((resolve, reject) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address }, (results, status) => {
+        if (status === 'OK' && results && results.length) {
+          const loc = results[0].geometry.location;
+          resolve({ lat: loc.lat(), lng: loc.lng() });
+        } else {
+          reject(new Error('Geocode: ' + status));
+        }
+      });
+    });
+  }
+
+  function distanceMatrixSdk(origin, destination) {
+    return new Promise((resolve, reject) => {
+      const service = new google.maps.DistanceMatrixService();
+      service.getDistanceMatrix({
+        origins: [origin],
+        destinations: [destination],
+        travelMode: 'DRIVING',
+        unitSystem: google.maps.UnitSystem.IMPERIAL,
+      }, (response, status) => {
+        if (status !== 'OK') {
+          reject(new Error('DistanceMatrix: ' + status));
+          return;
+        }
+        if (!response.rows || !response.rows.length || !response.rows[0].elements.length) {
+          reject(new Error('DistanceMatrix: empty response'));
+          return;
+        }
+        const el = response.rows[0].elements[0];
+        if (el.status !== 'OK') {
+          reject(new Error('DistanceMatrix element: ' + el.status));
+          return;
+        }
+        resolve({
+          distanceMiles: el.distance.value / 1609.344,
+          durationMin: el.duration.value / 60,
+        });
+      });
+    });
   }
 
   async function calcDistance(){
     const settings = loadSettings();
     if (!settings.google) {
-      setStatus('Google Maps API key required for auto-calculation. Add in Settings, or enter values manually.', true);
+      setStatus('Google Maps API key required. Add in Settings, or enter values manually.', true);
       openSettings();
       return;
     }
@@ -1144,36 +1182,43 @@
       destination = val('recvAddr') || val('recvHosp');
     }
     if (!origin || !destination) {
-      setStatus('Need sending and receiving addresses or coordinates to calculate.', true);
+      setStatus('Need both sending and receiving address (or coordinates) to calculate.', true);
       return;
     }
-    setStatus('<span class="spinner"></span>Looking up distances…');
+    setStatus('<span class="spinner"></span>Loading Google Maps SDK…');
     try {
-      // Ground
-      const ground = await distanceMatrix(origin, destination, settings.google);
+      await loadMapsSdk(settings.google);
+      setStatus('<span class="spinner"></span>Calculating ground distance…');
+      const ground = await distanceMatrixSdk(origin, destination);
       $('dGround').value = ground.distanceMiles.toFixed(1);
       $('tGround').value = Math.round(ground.durationMin);
 
-      // Air via geocoding both, then haversine
+      setStatus('<span class="spinner"></span>Calculating air distance…');
       let lat1, lng1, lat2, lng2;
       if (mode === 'scene' && val('sceneLat') && val('sceneLon')) {
         lat1 = parseFloat(val('sceneLat'));
         lng1 = parseFloat(val('sceneLon'));
       } else {
-        const o = await geocode(origin, settings.google);
+        const o = await geocodeSdk(origin);
         lat1 = o.lat; lng1 = o.lng;
       }
-      const d = await geocode(destination, settings.google);
-      lat2 = d.lat; lng2 = d.lng;
+      const dest = await geocodeSdk(destination);
+      lat2 = dest.lat; lng2 = dest.lng;
       const airMi = haversineMiles(lat1, lng1, lat2, lng2);
       $('dAir').value = airMi.toFixed(1);
-      $('tAir').value = Math.round(airMi / 135 * 60); // 135 mph cruise + ~5 min for takeoff/landing
+      $('tAir').value = Math.round(airMi / 135 * 60); // 135 mph cruise
 
       updateDistanceCard();
       setStatus('Distances calculated.');
       setTimeout(() => setStatus(''), 2000);
     } catch (err) {
-      setStatus('Distance lookup failed: ' + err.message, true);
+      const msg = err.message || String(err);
+      let hint = '';
+      if (/REQUEST_DENIED/i.test(msg)) hint = ' — Most likely cause: APIs not enabled. Open console.cloud.google.com → APIs & Services → Library and enable Maps JavaScript API, Distance Matrix API, and Geocoding API.';
+      else if (/OVER_QUERY_LIMIT|quota/i.test(msg)) hint = ' — Billing not active. Set up billing at console.cloud.google.com/billing.';
+      else if (/INVALID_REQUEST/i.test(msg)) hint = ' — Address may be malformed. Try a more specific address or use lat/long.';
+      else if (/Failed to load/i.test(msg)) hint = ' — Check that "Maps JavaScript API" is enabled in Google Cloud Console.';
+      setStatus('Distance lookup failed: ' + msg + hint, true);
     }
   }
 
