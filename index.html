@@ -408,6 +408,16 @@
       text-align: center;
       margin-top: 2px;
     }
+    #printArea .license-extras {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 6px 0 8px;
+    }
+    #printArea .license-extras .patient-photo img {
+      max-width: 2.0in;
+      max-height: 1.4in;
+    }
     @page { size: letter; margin: 0.5in; }
   }
 
@@ -485,6 +495,41 @@
   }
   .bg-interp.show { display: block; }
   .bg-interp strong { color: #0c4a6e; }
+
+  /* Photo thumbnail grid (license / face sheet / etc.) */
+  .photo-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .photo-thumb {
+    position: relative;
+    width: 120px;
+    height: 90px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f8fafc;
+  }
+  .photo-thumb img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .photo-thumb-remove {
+    position: absolute;
+    top: 2px; right: 2px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: rgba(220, 38, 38, 0.9);
+    color: white;
+    border: none;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 20px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .photo-thumb-remove:hover { background: #991b1b; }
 
   /* Crew Times — input + Now button */
   .time-now-row {
@@ -810,7 +855,7 @@
           </div>
 
           <label style="margin-top:10px">Driver's License Photo (stored on device; embeds in printed report)</label>
-          <input type="file" id="ptLicenseFile" accept="image/*" capture="environment" onchange="handleLicensePhoto(event)">
+          <input type="file" id="ptLicenseFile" accept="image/*" capture="environment" multiple onchange="handleLicensePhoto(event)">
           <div id="licensePreview"></div>
           <div id="licenseOcrBlock" style="display:none;margin-top:6px">
             <button type="button" class="calc-btn" onclick="extractLicenseData()">🤖 Auto-fill from license (pilot — sends photo to AI)</button>
@@ -818,7 +863,7 @@
           <div class="hint">Photo stays on device unless you click the AI extract button (pilot only).</div>
 
           <label style="margin-top:10px">Face Sheet / Wristband / MRN Sticker Photo (for MRN auto-fill)</label>
-          <input type="file" id="ptFaceSheetFile" accept="image/*" capture="environment" onchange="handleFaceSheetPhoto(event)">
+          <input type="file" id="ptFaceSheetFile" accept="image/*" capture="environment" multiple onchange="handleFaceSheetPhoto(event)">
           <div id="faceSheetPreview"></div>
           <div id="faceSheetOcrBlock" style="display:none;margin-top:6px">
             <button type="button" class="calc-btn" onclick="extractFaceSheetData()">🤖 Auto-fill MRN + demographics (pilot — sends photo to AI)</button>
@@ -1062,7 +1107,7 @@
 
           <div class="ocr-block" id="ocrBlockHistory" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrHistoryFile">📷 Face sheet PMH photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrHistoryFile" accept="image/*" capture="environment" onchange="handleHistoryPhoto(event)">
+            <input type="file" id="ocrHistoryFile" accept="image/*" capture="environment" multiple onchange="handleHistoryPhoto(event)">
             <div id="ocrHistoryStatus" class="hint"></div>
           </div>
         </div>
@@ -1223,7 +1268,7 @@
           <button class="add-btn" type="button" onclick="addIvLine()">+ Add IV line</button>
           <div class="ocr-block" id="ocrBlockIv" style="display:none;margin-top:8px">
             <label class="ocr-label" for="ocrIvFile">📷 Pump screen photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrIvFile" accept="image/*" capture="environment" onchange="handlePumpPhoto(event)">
+            <input type="file" id="ocrIvFile" accept="image/*" capture="environment" multiple onchange="handlePumpPhoto(event)">
             <div id="ocrIvStatus" class="hint"></div>
           </div>
         </div>
@@ -1245,7 +1290,7 @@
 
           <div class="ocr-block" id="ocrBlockMeds" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrMedsFile">📷 Face sheet home medications photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrMedsFile" accept="image/*" capture="environment" onchange="handleMedsPhoto(event)">
+            <input type="file" id="ocrMedsFile" accept="image/*" capture="environment" multiple onchange="handleMedsPhoto(event)">
             <div id="ocrMedsStatus" class="hint"></div>
           </div>
         </div>
@@ -1335,7 +1380,7 @@
           </div>
           <div class="ocr-block" id="ocrBlockVent" style="display:none;margin-top:8px">
             <label class="ocr-label" for="ocrVentFile">📷 Vent screen photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrVentFile" accept="image/*" capture="environment" onchange="handleVentPhoto(event)">
+            <input type="file" id="ocrVentFile" accept="image/*" capture="environment" multiple onchange="handleVentPhoto(event)">
             <div id="ocrVentStatus" class="hint"></div>
           </div>
         </div>
@@ -1957,83 +2002,110 @@
     if (age >= 0 && age < 130) $('ptAge').value = age;
   }
 
-  // ====== Driver's license photo (stored locally; embeds in print) ======
-  let licensePhotoDataUrl = null;
+  // ====== Driver's license photos (array; first one embeds in print) ======
+  let licensePhotoDataUrls = [];
   function handleLicensePhoto(event){
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      licensePhotoDataUrl = e.target.result;
-      renderLicensePreview();
-    };
-    reader.onerror = () => alert('Failed to read photo');
-    reader.readAsDataURL(file);
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    let remaining = files.length;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        licensePhotoDataUrls.push(e.target.result);
+        if (--remaining === 0) renderLicensePreview();
+      };
+      reader.onerror = () => { if (--remaining === 0) renderLicensePreview(); };
+      reader.readAsDataURL(file);
+    });
     event.target.value = '';
   }
-  function clearLicensePhoto(){
-    licensePhotoDataUrl = null;
+  function clearLicensePhotos(){
+    licensePhotoDataUrls = [];
+    renderLicensePreview();
+  }
+  function removeLicensePhotoAt(idx){
+    licensePhotoDataUrls.splice(idx, 1);
     renderLicensePreview();
   }
   function renderLicensePreview(){
     const wrap = $('licensePreview');
     if (!wrap) return;
-    if (!licensePhotoDataUrl) {
-      wrap.innerHTML = '';
-      return;
-    }
-    wrap.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px">
-        <img src="${licensePhotoDataUrl}" alt="License preview" style="max-width:180px;max-height:120px;border:1px solid #cbd5e1;border-radius:6px;object-fit:contain;background:#f8fafc">
-        <button type="button" class="clear-btn" onclick="clearLicensePhoto()">Remove</button>
+    if (!licensePhotoDataUrls.length) { wrap.innerHTML = ''; return; }
+    const thumbs = licensePhotoDataUrls.map((url, idx) => `
+      <div class="photo-thumb">
+        <img src="${url}" alt="License ${idx + 1}">
+        <button type="button" class="photo-thumb-remove" onclick="removeLicensePhotoAt(${idx})" title="Remove">×</button>
       </div>
+    `).join('');
+    wrap.innerHTML = `
+      <div class="photo-thumbs">${thumbs}</div>
+      <button type="button" class="clear-btn" onclick="clearLicensePhotos()" style="margin-top:4px">Clear all (${licensePhotoDataUrls.length})</button>
     `;
   }
-  // ====== Face sheet / wristband / MRN sticker photo ======
-  let faceSheetPhotoDataUrl = null;
+
+  // ====== Face sheet / wristband / MRN sticker photos (array) ======
+  let faceSheetPhotoDataUrls = [];
   function handleFaceSheetPhoto(event){
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      faceSheetPhotoDataUrl = e.target.result;
-      renderFaceSheetPreview();
-    };
-    reader.onerror = () => alert('Failed to read photo');
-    reader.readAsDataURL(file);
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    let remaining = files.length;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        faceSheetPhotoDataUrls.push(e.target.result);
+        if (--remaining === 0) renderFaceSheetPreview();
+      };
+      reader.onerror = () => { if (--remaining === 0) renderFaceSheetPreview(); };
+      reader.readAsDataURL(file);
+    });
     event.target.value = '';
   }
-  function clearFaceSheetPhoto(){
-    faceSheetPhotoDataUrl = null;
+  function clearFaceSheetPhotos(){
+    faceSheetPhotoDataUrls = [];
+    renderFaceSheetPreview();
+  }
+  function removeFaceSheetPhotoAt(idx){
+    faceSheetPhotoDataUrls.splice(idx, 1);
     renderFaceSheetPreview();
   }
   function renderFaceSheetPreview(){
     const wrap = $('faceSheetPreview');
     if (!wrap) return;
-    if (!faceSheetPhotoDataUrl) {
-      wrap.innerHTML = '';
-      return;
-    }
-    wrap.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px">
-        <img src="${faceSheetPhotoDataUrl}" alt="Face sheet preview" style="max-width:180px;max-height:120px;border:1px solid #cbd5e1;border-radius:6px;object-fit:contain;background:#f8fafc">
-        <button type="button" class="clear-btn" onclick="clearFaceSheetPhoto()">Remove</button>
+    if (!faceSheetPhotoDataUrls.length) { wrap.innerHTML = ''; return; }
+    const thumbs = faceSheetPhotoDataUrls.map((url, idx) => `
+      <div class="photo-thumb">
+        <img src="${url}" alt="Face sheet ${idx + 1}">
+        <button type="button" class="photo-thumb-remove" onclick="removeFaceSheetPhotoAt(${idx})" title="Remove">×</button>
       </div>
+    `).join('');
+    wrap.innerHTML = `
+      <div class="photo-thumbs">${thumbs}</div>
+      <button type="button" class="clear-btn" onclick="clearFaceSheetPhotos()" style="margin-top:4px">Clear all (${faceSheetPhotoDataUrls.length})</button>
     `;
   }
+
+  // Convert stored data URLs back to File objects for the vision API call.
+  async function dataUrlsToFiles(urls, baseName){
+    const files = [];
+    for (let i = 0; i < urls.length; i++) {
+      const resp = await fetch(urls[i]);
+      const blob = await resp.blob();
+      files.push(new File([blob], `${baseName}-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' }));
+    }
+    return files;
+  }
+
   async function extractFaceSheetData(){
-    if (!faceSheetPhotoDataUrl) { alert('Upload a face sheet/wristband photo first.'); return; }
+    if (!faceSheetPhotoDataUrls.length) { alert('Upload at least one face sheet/wristband photo first.'); return; }
     if (!confirmPhi('facility face sheet / wristband')) return;
-    const resp = await fetch(faceSheetPhotoDataUrl);
-    const blob = await resp.blob();
-    const file = new File([blob], 'face-sheet.jpg', { type: blob.type || 'image/jpeg' });
-    const prompt = `Examine this hospital face sheet, patient wristband, or MRN sticker photo and extract the patient identifiers visible. Return ONLY a JSON object:
+    const files = await dataUrlsToFiles(faceSheetPhotoDataUrls, 'face-sheet');
+    const prompt = `Examine the hospital face sheet, wristband, or MRN sticker photo(s) and extract the patient identifiers visible across all images. Return ONLY a JSON object:
 { "mrn": "", "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "", "sex": "M|F" }
 - "mrn" is the medical record number — usually prefixed letters then digits (e.g., "E1234567"), or a long numeric string. Sometimes labeled "MRN", "Med Rec #", "Patient ID", "Account #" — prefer the MRN/Med Rec # if multiple IDs are visible.
 - Omit fields you cannot read. Do not invent values.
 Return ONLY the JSON object, no markdown.`;
     try {
-      let text = await callClaudeVisionMulti(prompt, [file]);
+      let text = await callClaudeVisionMulti(prompt, files);
       text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
       const data = JSON.parse(text);
       const setIfEmpty = (id, v) => { if (v && $(id) && !$(id).value) $(id).value = v; };
@@ -2053,17 +2125,14 @@ Return ONLY the JSON object, no markdown.`;
   }
 
   async function extractLicenseData(){
-    if (!licensePhotoDataUrl) { alert('Upload a license photo first.'); return; }
+    if (!licensePhotoDataUrls.length) { alert('Upload at least one license photo first.'); return; }
     if (!confirmPhi("driver's license")) return;
-    // Convert data URL to File for vision call
-    const resp = await fetch(licensePhotoDataUrl);
-    const blob = await resp.blob();
-    const file = new File([blob], 'license.jpg', { type: blob.type || 'image/jpeg' });
-    const prompt = `Examine this US driver's license photo and extract the personal information visible. Return ONLY a JSON object:
+    const files = await dataUrlsToFiles(licensePhotoDataUrls, 'license');
+    const prompt = `Examine the US driver's license photo(s) (may include front and back, or multiple angles) and extract the personal information visible. Return ONLY a JSON object:
 { "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "Full street address", "height": "5'10\\"" or "70 in", "weight": "180 lb", "sex": "M|F" }
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON object, no markdown.`;
     try {
-      let text = await callClaudeVisionMulti(prompt, [file]);
+      let text = await callClaudeVisionMulti(prompt, files);
       text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
       const data = JSON.parse(text);
       const setIfEmpty = (id, v) => { if (v && $(id) && !$(id).value) $(id).value = v; };
@@ -3035,13 +3104,14 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
     return confirm(`PHI WARNING\n\nYou are about to send a ${label} photo to the Claude API.\n\nConfirm you have covered or removed:\n  • Patient name\n  • MRN / patient ID\n  • Date of birth\n  • Any other identifiers visible on the screen\n\nPress OK to proceed, Cancel to abort.`);
   }
   async function handlePumpPhoto(event){
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
     if (!confirmPhi('IV pump')) { event.target.value = ''; return; }
     const status = $('ocrIvStatus');
-    status.innerHTML = '<span class="spinner"></span> Extracting pump settings…';
+    const n = files.length;
+    status.innerHTML = `<span class="spinner"></span> Extracting pump settings from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
-    const prompt = `Examine this photo of an IV infusion pump screen. Extract every infusion currently visible. Return ONLY a JSON object of the form:
+    const prompt = `Examine the IV infusion pump screen photo(s). Extract every infusion visible across all images. De-duplicate if the same channel appears in multiple photos. Return ONLY a JSON object:
 { "infusions": [ { "drug": "", "concentration": "", "dose": "", "rate_ml_hr": "", "vtbi": "", "channel": "" } ] }
 - "drug": medication name as shown
 - "concentration": as shown on screen if present (e.g., "16 mg / 250 mL")
@@ -3051,7 +3121,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
 - "channel": pump channel/letter if applicable
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no markdown.`;
     try {
-      let text = await callClaudeVision(prompt, file);
+      let text = await callClaudeVisionMulti(prompt, files);
       text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
       const data = JSON.parse(text);
       const infusions = Array.isArray(data.infusions) ? data.infusions : [];
@@ -3083,13 +3153,14 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no m
     }
   }
   async function handleVentPhoto(event){
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
     if (!confirmPhi('ventilator')) { event.target.value = ''; return; }
     const status = $('ocrVentStatus');
-    status.innerHTML = '<span class="spinner"></span> Extracting vent settings…';
+    const n = files.length;
+    status.innerHTML = `<span class="spinner"></span> Extracting vent settings from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
-    const prompt = `Examine this photo of a mechanical ventilator screen. Extract the current settings. Return ONLY a JSON object:
+    const prompt = `Examine the mechanical ventilator screen photo(s) and extract the current settings. If multiple photos show different states, prefer the most recent/most complete view. Return ONLY a JSON object:
 { "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "", "ie_ratio": "", "peak_pressure": "", "plateau_pressure": "", "minute_ventilation": "" }
 - "mode": ventilator mode as shown (e.g., "AC/VC", "PRVC", "SIMV", "CPAP")
 - "fio2": as percentage (e.g., "40%")
@@ -3099,7 +3170,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no m
 - "ps": pressure support in cmH2O
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     try {
-      let text = await callClaudeVision(prompt, file);
+      let text = await callClaudeVisionMulti(prompt, files);
       text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
       const data = JSON.parse(text);
       // Ensure vent fields are visible
@@ -3409,20 +3480,21 @@ Omit fields you cannot read. Do not invent values. Return ONLY the JSON object, 
 
   // ====== Face sheet — home medications photo (pilot) ======
   async function handleMedsPhoto(event){
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
     if (!confirmPhi('face sheet medication list')) { event.target.value = ''; return; }
     const status = $('ocrMedsStatus');
-    status.innerHTML = '<span class="spinner"></span> Extracting medications…';
+    const n = files.length;
+    status.innerHTML = `<span class="spinner"></span> Extracting medications from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
-    const prompt = `Examine this hospital face sheet photo and extract ONLY the patient's home medication list. Return plain text:
-- One medication per line
+    const prompt = `Examine the hospital face sheet photo(s) and extract ONLY the patient's home medication list across all images. Return plain text:
+- One medication per line, de-duplicated across pages
 - Format each as "drug dose route frequency" (e.g., "amlodipine 5 mg PO daily")
 - Use generic names if shown; preserve brand names if that is all that is visible
 - Skip header/footer text, allergies, vitals, problem list — just the medications themselves
 - Do not invent or extrapolate. Do not add commentary.`;
     try {
-      const text = await callClaudeVisionMulti(prompt, [file]);
+      const text = await callClaudeVisionMulti(prompt, files);
       const meds = $('medsPTA');
       const header = '— Home meds (from face sheet) —';
       const block = `${header}\n${text}`;
@@ -3439,20 +3511,21 @@ Omit fields you cannot read. Do not invent values. Return ONLY the JSON object, 
 
   // ====== Face sheet — past medical history photo (pilot) ======
   async function handleHistoryPhoto(event){
-    const file = event.target.files && event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
     if (!confirmPhi('face sheet history')) { event.target.value = ''; return; }
     const status = $('ocrHistoryStatus');
-    status.innerHTML = '<span class="spinner"></span> Extracting history…';
+    const n = files.length;
+    status.innerHTML = `<span class="spinner"></span> Extracting history from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
-    const prompt = `Examine this hospital face sheet photo and extract ONLY the patient's past medical history (PMH), problem list, and past surgical history (PSH) if shown. Return plain text:
-- One condition per line or short comma-separated list
+    const prompt = `Examine the hospital face sheet photo(s) and extract ONLY the patient's past medical history (PMH), problem list, and past surgical history (PSH) across all images. Return plain text:
+- One condition per line or short comma-separated list, de-duplicated across pages
 - Use accepted medical abbreviations (HTN, HLD, DM2, CAD, AFib, CKD, COPD, OSA, GERD, etc.)
 - Preserve dates if shown (e.g., "MI 2018", "CABG 2020", "CVA 2021")
 - Skip allergies, medications, social history, vitals, family history — only PMH/PSH/problem list
 - Do not invent. Do not add commentary.`;
     try {
-      const text = await callClaudeVisionMulti(prompt, [file]);
+      const text = await callClaudeVisionMulti(prompt, files);
       const pmh = $('pmh');
       pmh.value = pmh.value.trim() ? pmh.value.trim() + '\n' + text : text;
       status.innerHTML = '✓ History appended to PMH. Review for accuracy.';
@@ -3780,9 +3853,9 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('labRows')) $('labRows').innerHTML = '';
     if ($('bgInterp')) $('bgInterp').classList.remove('show');
     document.querySelector('input[name=bgType][value=abg]').checked = true;
-    licensePhotoDataUrl = null;
+    licensePhotoDataUrls = [];
     renderLicensePreview();
-    faceSheetPhotoDataUrl = null;
+    faceSheetPhotoDataUrls = [];
     renderFaceSheetPreview();
     if ($('ptHeightConv')) $('ptHeightConv').textContent = '';
     if ($('ptWeightConv')) $('ptWeightConv').textContent = '';
@@ -4186,7 +4259,8 @@ ${transcript}`;
     html += '</div>';
 
     // Patient face sheet
-    if (p.name || p.dob || p.age || p.mrn || p.address || p.height || p.weight || licensePhotoDataUrl) {
+    const hasLicensePhoto = licensePhotoDataUrls && licensePhotoDataUrls.length;
+    if (p.name || p.dob || p.age || p.mrn || p.address || p.height || p.weight || hasLicensePhoto) {
       html += '<h2>Patient</h2>';
       html += '<div class="patient-block">';
       html += '<div class="patient-text">';
@@ -4201,10 +4275,19 @@ ${transcript}`;
       html += '<div class="meta">';
       pmeta.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
       html += '</div></div>';
-      if (licensePhotoDataUrl) {
-        html += `<div class="patient-photo"><img src="${licensePhotoDataUrl}" alt="Driver's license"><div class="photo-caption">Driver's license</div></div>`;
+      if (hasLicensePhoto) {
+        // Embed first photo (typically front); if more, render below
+        html += `<div class="patient-photo"><img src="${licensePhotoDataUrls[0]}" alt="Driver's license"><div class="photo-caption">Driver's license${licensePhotoDataUrls.length > 1 ? ' (front)' : ''}</div></div>`;
       }
       html += '</div>';
+      // Additional license photos below the patient block (back, etc.)
+      if (licensePhotoDataUrls.length > 1) {
+        html += '<div class="license-extras">';
+        for (let i = 1; i < licensePhotoDataUrls.length; i++) {
+          html += `<div class="patient-photo"><img src="${licensePhotoDataUrls[i]}" alt="Driver's license ${i + 1}"><div class="photo-caption">Driver's license #${i + 1}</div></div>`;
+        }
+        html += '</div>';
+      }
     }
 
     // Logistics block (sending / receiving / times / distance)
