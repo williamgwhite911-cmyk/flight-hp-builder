@@ -1059,6 +1059,12 @@
           <textarea id="onset" placeholder="3 days worsening SOB, 2 days progressive edema, 22-pound weight gain..."></textarea>
           <label>Pertinent PMH</label>
           <textarea id="pmh" placeholder="HFpEF, paroxysmal AFib, RA, recent staghorn renal calculus s/p stent removal 2 weeks ago, prior duodenal ulcer s/p endoscopic clipping 01/2026"></textarea>
+
+          <div class="ocr-block" id="ocrBlockHistory" style="display:none;margin-top:10px">
+            <label class="ocr-label" for="ocrHistoryFile">📷 Face sheet PMH photo (pilot) — cover patient identifiers first</label>
+            <input type="file" id="ocrHistoryFile" accept="image/*" capture="environment" onchange="handleHistoryPhoto(event)">
+            <div id="ocrHistoryStatus" class="hint"></div>
+          </div>
         </div>
       </details>
     </fieldset>
@@ -1236,6 +1242,12 @@
           <input type="text" id="rsi" placeholder="Etomidate 0.3 mg/kg, Rocuronium 1 mg/kg">
           <label>Sedation Drips (if intubated)</label>
           <input type="text" id="sedation" placeholder="Propofol 30 mcg/kg/min; Fentanyl 1 mcg/kg/hr">
+
+          <div class="ocr-block" id="ocrBlockMeds" style="display:none;margin-top:10px">
+            <label class="ocr-label" for="ocrMedsFile">📷 Face sheet home medications photo (pilot) — cover patient identifiers first</label>
+            <input type="file" id="ocrMedsFile" accept="image/*" capture="environment" onchange="handleMedsPhoto(event)">
+            <div id="ocrMedsStatus" class="hint"></div>
+          </div>
         </div>
       </details>
     </fieldset>
@@ -2907,7 +2919,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   // ====== Photo OCR (Phase 4 — pilot only) ======
   function refreshPhotoOcrUi(){
     const on = loadSettings().photoOcr;
-    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = on ? 'block' : 'none';
     });
@@ -3389,6 +3401,64 @@ Omit fields you cannot read. Do not invent values. Return ONLY the JSON object, 
       status.style.color = '#16a34a';
     } catch (err) {
       status.textContent = 'Extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  // ====== Face sheet — home medications photo (pilot) ======
+  async function handleMedsPhoto(event){
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!confirmPhi('face sheet medication list')) { event.target.value = ''; return; }
+    const status = $('ocrMedsStatus');
+    status.innerHTML = '<span class="spinner"></span> Extracting medications…';
+    status.style.color = '#5b21b6';
+    const prompt = `Examine this hospital face sheet photo and extract ONLY the patient's home medication list. Return plain text:
+- One medication per line
+- Format each as "drug dose route frequency" (e.g., "amlodipine 5 mg PO daily")
+- Use generic names if shown; preserve brand names if that is all that is visible
+- Skip header/footer text, allergies, vitals, problem list — just the medications themselves
+- Do not invent or extrapolate. Do not add commentary.`;
+    try {
+      const text = await callClaudeVisionMulti(prompt, [file]);
+      const meds = $('medsPTA');
+      const header = '— Home meds (from face sheet) —';
+      const block = `${header}\n${text}`;
+      meds.value = meds.value.trim() ? meds.value.trim() + '\n\n' + block : block;
+      status.innerHTML = '✓ Medications appended to "Medications Given PTA". Review for accuracy.';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  // ====== Face sheet — past medical history photo (pilot) ======
+  async function handleHistoryPhoto(event){
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!confirmPhi('face sheet history')) { event.target.value = ''; return; }
+    const status = $('ocrHistoryStatus');
+    status.innerHTML = '<span class="spinner"></span> Extracting history…';
+    status.style.color = '#5b21b6';
+    const prompt = `Examine this hospital face sheet photo and extract ONLY the patient's past medical history (PMH), problem list, and past surgical history (PSH) if shown. Return plain text:
+- One condition per line or short comma-separated list
+- Use accepted medical abbreviations (HTN, HLD, DM2, CAD, AFib, CKD, COPD, OSA, GERD, etc.)
+- Preserve dates if shown (e.g., "MI 2018", "CABG 2020", "CVA 2021")
+- Skip allergies, medications, social history, vitals, family history — only PMH/PSH/problem list
+- Do not invent. Do not add commentary.`;
+    try {
+      const text = await callClaudeVisionMulti(prompt, [file]);
+      const pmh = $('pmh');
+      pmh.value = pmh.value.trim() ? pmh.value.trim() + '\n' + text : text;
+      status.innerHTML = '✓ History appended to PMH. Review for accuracy.';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Failed: ' + (err.message || err);
       status.style.color = '#991b1b';
     } finally {
       event.target.value = '';
