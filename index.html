@@ -2888,11 +2888,71 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
       r.readAsDataURL(file);
     });
   }
+
+  // Load a File into an Image element (revokes object URL after load).
+  function loadImageElement(file){
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed (try a JPG/PNG; HEIC may not decode in this browser)')); };
+      img.src = url;
+    });
+  }
+
+  // Compress a photo to <~3.5 MB base64-decoded so it fits Anthropic's 5 MB image limit.
+  // Resizes to max 2048 px on the longest edge, re-encodes as JPEG at progressively lower quality if needed.
+  // Returns { b64, mediaType }.
+  async function compressImageForVision(file){
+    // Small files: skip compression
+    if (file.size < 1024 * 1024) {
+      const b64 = await fileToBase64(file);
+      const media = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
+      return { b64, mediaType: media };
+    }
+    let img;
+    try {
+      img = await loadImageElement(file);
+    } catch (e) {
+      // Fallback: send raw (may fail on size, but at least we tried)
+      const b64 = await fileToBase64(file);
+      const media = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
+      return { b64, mediaType: media };
+    }
+    const MAX_DIM = 2048;
+    let { width, height } = img;
+    const longest = Math.max(width, height);
+    if (longest > MAX_DIM) {
+      const scale = MAX_DIM / longest;
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+    // Decoded image must fit under 5 MB. Base64 inflates ~33%, but limit is on decoded bytes.
+    // Target 3.5 MB base64 length to leave headroom.
+    const TARGET_B64_LEN = 3.5 * 1024 * 1024;
+    for (const q of [0.85, 0.75, 0.65, 0.55, 0.45, 0.35]) {
+      const dataUrl = canvas.toDataURL('image/jpeg', q);
+      const comma = dataUrl.indexOf(',');
+      const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      if (b64.length < TARGET_B64_LEN) {
+        return { b64, mediaType: 'image/jpeg' };
+      }
+    }
+    // Last-resort: encode at lowest quality and return whatever we have
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
+    const comma = dataUrl.indexOf(',');
+    return { b64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, mediaType: 'image/jpeg' };
+  }
+
   async function callClaudeVision(prompt, file){
     const settings = loadSettings();
     if (!settings.anthropic) throw new Error('No API key set. Open Settings.');
-    const b64 = await fileToBase64(file);
-    const media = file.type && file.type.startsWith('image/') ? file.type : 'image/jpeg';
+    const { b64, mediaType: media } = await compressImageForVision(file);
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -3022,9 +3082,8 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     if (!settings.anthropic) throw new Error('No API key set. Open Settings.');
     const images = [];
     for (const f of files) {
-      const b64 = await fileToBase64(f);
-      const media = f.type && f.type.startsWith('image/') ? f.type : 'image/jpeg';
-      images.push({ type: 'image', source: { type: 'base64', media_type: media, data: b64 } });
+      const { b64, mediaType } = await compressImageForVision(f);
+      images.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: b64 } });
     }
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
