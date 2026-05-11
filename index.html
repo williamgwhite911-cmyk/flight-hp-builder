@@ -444,6 +444,24 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Allergy rows */
+  .allergy-row {
+    display: grid;
+    grid-template-columns: 1.2fr 0.9fr 1.4fr 32px;
+    gap: 4px;
+    margin-bottom: 4px;
+    align-items: center;
+  }
+  .allergy-row input, .allergy-row select {
+    padding: 6px 8px;
+    font-size: 13px;
+    border-radius: 6px;
+  }
+  .allergy-row .remove-btn { height: 32px; font-size: 16px; }
+  @media (max-width: 600px) {
+    .allergy-row { grid-template-columns: 1fr 0.8fr 1fr 28px; font-size: 12px; }
+  }
+
   /* Lab rows (Diagnostics PTA — Labs) */
   .lab-row {
     display: grid;
@@ -869,6 +887,23 @@
             <button type="button" class="calc-btn" onclick="extractFaceSheetData()">🤖 Auto-fill MRN + demographics (pilot — sends photo to AI)</button>
           </div>
           <div class="hint">Photo of a hospital wristband, ID sticker, or printed face sheet. Stays on device unless you click extract. Not embedded in the printed report.</div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details open>
+        <summary>Allergies</summary>
+        <div class="fieldset-body">
+          <label>Allergy status</label>
+          <div class="toggle-group">
+            <label><input type="radio" name="allergyStatus" value="has" checked><span>Has allergies</span></label>
+            <label><input type="radio" name="allergyStatus" value="nkda"><span>NKDA (drugs)</span></label>
+            <label><input type="radio" name="allergyStatus" value="nka"><span>NKA (all)</span></label>
+          </div>
+          <div id="allergyList"></div>
+          <button type="button" class="add-btn" onclick="addAllergyRow()">+ Add allergy</button>
+          <div class="hint">Include allergen, type, and reaction. Switch to NKDA or NKA to indicate no allergies.</div>
         </div>
       </details>
     </fieldset>
@@ -2099,9 +2134,11 @@
     if (!faceSheetPhotoDataUrls.length) { alert('Upload at least one face sheet/wristband photo first.'); return; }
     if (!confirmPhi('facility face sheet / wristband')) return;
     const files = await dataUrlsToFiles(faceSheetPhotoDataUrls, 'face-sheet');
-    const prompt = `Examine the hospital face sheet, wristband, or MRN sticker photo(s) and extract the patient identifiers visible across all images. Return ONLY a JSON object:
-{ "mrn": "", "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "", "sex": "M|F" }
-- "mrn" is the medical record number — usually prefixed letters then digits (e.g., "E1234567"), or a long numeric string. Sometimes labeled "MRN", "Med Rec #", "Patient ID", "Account #" — prefer the MRN/Med Rec # if multiple IDs are visible.
+    const prompt = `Examine the hospital face sheet, wristband, or MRN sticker photo(s) and extract the patient identifiers AND allergies if visible. Return ONLY a JSON object:
+{ "mrn": "", "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "", "sex": "M|F",
+  "allergies": { "status": "has|nkda|nka", "items": [ { "allergen": "", "type": "Medication|Food|Environmental|Latex|Contrast|Insect/Sting|Other", "reaction": "" } ] } }
+- "mrn" is the medical record number — usually prefixed letters then digits (e.g., "E1234567"). Sometimes labeled "MRN", "Med Rec #", "Patient ID", "Account #" — prefer MRN/Med Rec # if multiple IDs are visible.
+- "allergies": If the face sheet shows "NKDA" or "No Known Drug Allergies", set status to "nkda". If "NKA" or "No Known Allergies", set "nka". Otherwise extract each allergen with its type and reaction if visible.
 - Omit fields you cannot read. Do not invent values.
 Return ONLY the JSON object, no markdown.`;
     try {
@@ -2115,6 +2152,18 @@ Return ONLY the JSON object, no markdown.`;
       setIfEmpty('ptAddress', data.address);
       if (data.sex && !val('ptSex')) {
         $('ptSex').value = data.sex === 'M' ? 'Male' : (data.sex === 'F' ? 'Female' : '');
+      }
+      // Apply allergies if extracted (and current list is empty)
+      if (data.allergies && !document.querySelectorAll('#allergyList .allergy-row').length) {
+        const st = data.allergies.status;
+        if (st === 'nkda' || st === 'nka') {
+          const r = document.querySelector('input[name=allergyStatus][value=' + st + ']');
+          if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+        } else if (Array.isArray(data.allergies.items)) {
+          const r = document.querySelector('input[name=allergyStatus][value=has]');
+          if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+          data.allergies.items.forEach(a => { if (a && a.allergen) addAllergyRow(a); });
+        }
       }
       onDobChange();
       const filled = Object.keys(data).filter(k => data[k]);
@@ -2840,6 +2889,7 @@ Return plain text only.`;
         height: val('ptHeight'),
         weight: val('ptWeight'),
       },
+      allergies: gatherAllergies(),
       sending: mode === 'ift'
         ? { hospital: val('sendHospName'), address: val('sendHospAddr'),
             nurse: nameCred('sendNurse'), md: nameCred('sendMD') }
@@ -2971,6 +3021,7 @@ The patient's acuity was classified as [acuity] due to [reason matching the diag
 CRITICAL INSTRUCTIONS:
 - Use exact times, names, doses, and numbers from the data; do not invent values.
 - If "times.roomEntry" is provided, include it in the narrative as the time the flight crew entered the room/ambulance. If "times.monitorApplied" is provided, note when the cardiac monitor was applied. Mention these in the patient handoff / transport flow section, not in the H&P narrative.
+- Include allergies prominently in the template under a dedicated "Allergies:" line. If "allergies.status" is "nkda", write "NKDA". If "nka", write "NKA". Otherwise list each allergen with type and reaction (e.g., "Penicillin (Medication) — anaphylaxis; Shellfish (Food) — hives").
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
 - Use professional EMS/clinical language.
 - Do not use em dashes.
@@ -3231,6 +3282,43 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
 
   // ====== Lab rows (structured) ======
   function attrEsc(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+  // ====== Allergies ======
+  const ALLERGY_TYPES = ['Medication','Food','Environmental','Latex','Contrast','Insect/Sting','Other'];
+  function addAllergyRow(data){
+    data = data || {};
+    const div = document.createElement('div');
+    div.className = 'allergy-row';
+    const opts = ALLERGY_TYPES.map(t => `<option value="${t}" ${data.type === t ? 'selected' : ''}>${t}</option>`).join('');
+    div.innerHTML = `
+      <input type="text" class="alg-name" placeholder="Allergen (e.g., Penicillin)" value="${attrEsc(data.allergen)}">
+      <select class="alg-type"><option value="">— Type —</option>${opts}</select>
+      <input type="text" class="alg-rxn" placeholder="Reaction (hives, anaphylaxis, GI…)" value="${attrEsc(data.reaction)}">
+      <button class="remove-btn" type="button" title="Remove">×</button>
+    `;
+    div.querySelector('.remove-btn').addEventListener('click', () => div.remove());
+    $('allergyList').appendChild(div);
+  }
+  function gatherAllergies(){
+    const status = (document.querySelector('input[name=allergyStatus]:checked') || {}).value || 'has';
+    if (status === 'nkda' || status === 'nka') return { status, items: [] };
+    const items = Array.from(document.querySelectorAll('#allergyList .allergy-row')).map(div => ({
+      allergen: div.querySelector('.alg-name').value.trim(),
+      type: div.querySelector('.alg-type').value,
+      reaction: div.querySelector('.alg-rxn').value.trim(),
+    })).filter(a => a.allergen);
+    return { status: 'has', items };
+  }
+  // When NKDA/NKA is selected, hide the row list and disable add button
+  document.querySelectorAll('input[name=allergyStatus]').forEach(r => {
+    r.addEventListener('change', () => {
+      const v = document.querySelector('input[name=allergyStatus]:checked').value;
+      const list = $('allergyList');
+      const isNo = v === 'nkda' || v === 'nka';
+      if (list) list.style.opacity = isNo ? '0.4' : '1';
+      if (list) list.style.pointerEvents = isNo ? 'none' : '';
+    });
+  });
+
   // ====== Common adult lab reference ranges (US units) ======
   // Used to auto-flag rows H / L / critical / normal based on the value typed.
   // Ranges are intentionally a bit wide (use the broader of sex-specific ranges).
@@ -3857,6 +3945,9 @@ ${JSON.stringify(data, null, 2)}`;
     renderLicensePreview();
     faceSheetPhotoDataUrls = [];
     renderFaceSheetPreview();
+    if ($('allergyList')) $('allergyList').innerHTML = '';
+    const algHas = document.querySelector('input[name=allergyStatus][value=has]');
+    if (algHas) { algHas.checked = true; algHas.dispatchEvent(new Event('change')); }
     if ($('ptHeightConv')) $('ptHeightConv').textContent = '';
     if ($('ptWeightConv')) $('ptWeightConv').textContent = '';
   }
@@ -4009,6 +4100,7 @@ ${JSON.stringify(data, null, 2)}`;
 Schema:
 {
   "patient": { "name": "Last, First", "dob": "YYYY-MM-DD", "age": "", "sex": "Male|Female|Other", "mrn": "", "address": "", "height": "5'10\" or 178 cm", "weight": "180 lb or 82 kg" },
+  "allergies": { "status": "has|nkda|nka", "items": [ { "allergen": "", "type": "Medication|Food|Environmental|Latex|Contrast|Insect/Sting|Other", "reaction": "" } ] },
   "aircraft": "tail # or aircraft name",
   "callType": "ift|scene",
   "times": { "roomEntry": "HH:MM 24h", "monitorApplied": "HH:MM 24h" },
@@ -4098,6 +4190,17 @@ ${transcript}`;
       onDobChange();
     }
     setIf('aircraft', d.aircraft);
+    if (d.allergies) {
+      const st = d.allergies.status;
+      if (st === 'nkda' || st === 'nka') {
+        const r = document.querySelector('input[name=allergyStatus][value=' + st + ']');
+        if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+      } else if (Array.isArray(d.allergies.items) && d.allergies.items.length) {
+        const r = document.querySelector('input[name=allergyStatus][value=has]');
+        if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+        d.allergies.items.forEach(a => { if (a && a.allergen) addAllergyRow(a); });
+      }
+    }
     if (d.times) {
       setIf('tRoom', d.times.roomEntry);
       setIf('tMonitor', d.times.monitorApplied);
@@ -4287,6 +4390,23 @@ ${transcript}`;
           html += `<div class="patient-photo"><img src="${licensePhotoDataUrls[i]}" alt="Driver's license ${i + 1}"><div class="photo-caption">Driver's license #${i + 1}</div></div>`;
         }
         html += '</div>';
+      }
+    }
+
+    // Allergies block — prominent, right after Patient
+    if (d.allergies) {
+      const a = d.allergies;
+      html += '<h2>Allergies</h2>';
+      if (a.status === 'nkda') html += '<p><b>NKDA</b> (No Known Drug Allergies)</p>';
+      else if (a.status === 'nka') html += '<p><b>NKA</b> (No Known Allergies)</p>';
+      else if (Array.isArray(a.items) && a.items.length) {
+        html += '<table><thead><tr><th>Allergen</th><th>Type</th><th>Reaction</th></tr></thead><tbody>';
+        a.items.forEach(it => {
+          html += `<tr><td><b>${escapeHtml(it.allergen || '')}</b></td><td>${escapeHtml(it.type || '')}</td><td>${escapeHtml(it.reaction || '')}</td></tr>`;
+        });
+        html += '</tbody></table>';
+      } else {
+        html += '<p><i>Not documented</i></p>';
       }
     }
 
