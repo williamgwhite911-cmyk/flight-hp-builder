@@ -807,6 +807,24 @@
     </fieldset>
 
     <fieldset>
+      <details>
+        <summary>📑 Hospital Paperwork Bulk Upload (PDF / JPG, up to ~30 pages)</summary>
+        <div class="fieldset-body">
+          <div class="warning-box">
+            <strong>HIPAA notice.</strong> Hospital paperwork contains extensive PHI. Sending to the Claude API requires a signed BAA with Anthropic. Confirm your BAA is in place before uploading live patient data.
+          </div>
+          <div class="hint">Upload the full sending-facility packet — face sheet, H&P, MAR, labs, imaging reports, etc. Mixed PDFs and photos are OK. AI scans all pages, populates every relevant section of the form, and produces a clinician-only summary. The summary is NOT printed on the chart.</div>
+          <label>Select files (Cmd/Shift-click for multiple)</label>
+          <input type="file" id="paperworkFiles" accept=".pdf,image/*" capture="environment" multiple onchange="onPaperworkFilesSelected(event)">
+          <div id="paperworkFileList" class="hint"></div>
+          <button class="add-btn" type="button" style="background:#ede9fe;color:#5b21b6;border-color:#c4b5fd" onclick="processHospitalPaperwork()">✨ Extract Everything & Fill the Form</button>
+          <div id="paperworkStatus" style="font-size:12px;margin-top:6px;color:#64748b"></div>
+          <div id="paperworkSummary" style="display:none;margin-top:8px"></div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
       <details open>
         <summary>Flight & Crew</summary>
         <div class="fieldset-body">
@@ -3951,6 +3969,11 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('allergyList')) $('allergyList').innerHTML = '';
     const algHas = document.querySelector('input[name=allergyStatus][value=has]');
     if (algHas) { algHas.checked = true; algHas.dispatchEvent(new Event('change')); }
+    paperworkFiles = [];
+    if ($('paperworkFileList')) $('paperworkFileList').textContent = '';
+    if ($('paperworkStatus')) $('paperworkStatus').textContent = '';
+    if ($('paperworkSummary')) { $('paperworkSummary').innerHTML = ''; $('paperworkSummary').style.display = 'none'; }
+    if ($('paperworkFiles')) $('paperworkFiles').value = '';
     if ($('ptHeightConv')) $('ptHeightConv').textContent = '';
     if ($('ptWeightConv')) $('ptWeightConv').textContent = '';
   }
@@ -4080,6 +4103,182 @@ ${JSON.stringify(data, null, 2)}`;
     const reader = new FileReader();
     reader.onload = e => { $('transcript').value = e.target.result; };
     reader.readAsText(file);
+  }
+
+  // ====== Hospital paperwork bulk upload ======
+  // Accepts a mix of PDFs and images, sends to Claude with the full extraction
+  // schema, applies extracted fields, and shows a clinician-only summary that
+  // is NOT printed.
+  let paperworkFiles = [];
+  function onPaperworkFilesSelected(event){
+    paperworkFiles = Array.from(event.target.files || []);
+    renderPaperworkFileList();
+  }
+  function renderPaperworkFileList(){
+    const wrap = $('paperworkFileList');
+    if (!wrap) return;
+    if (!paperworkFiles.length) { wrap.textContent = ''; return; }
+    const totalMb = (paperworkFiles.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1);
+    const names = paperworkFiles.map(f => f.name).join(', ');
+    wrap.textContent = `${paperworkFiles.length} file(s), ${totalMb} MB total: ${names}`;
+  }
+
+  async function processHospitalPaperwork(){
+    if (!paperworkFiles.length) {
+      const s = $('paperworkStatus');
+      s.textContent = 'Select PDFs or images first.';
+      s.style.color = '#991b1b';
+      return;
+    }
+    if (!confirmPhi(`hospital paperwork bundle (${paperworkFiles.length} file${paperworkFiles.length === 1 ? '' : 's'})`)) return;
+    const settings = loadSettings();
+    if (!settings.anthropic) {
+      setStatus('Anthropic API key required for paperwork extraction.', true);
+      openSettings();
+      return;
+    }
+    const status = $('paperworkStatus');
+    status.style.color = '#5b21b6';
+    status.innerHTML = `<span class="spinner"></span> Reading ${paperworkFiles.length} file(s)…`;
+
+    // Reject any file >32 MB (Claude PDF / image limit)
+    const tooLarge = paperworkFiles.find(f => f.size > 32 * 1024 * 1024);
+    if (tooLarge) {
+      status.textContent = `"${tooLarge.name}" is over 32 MB. Split it or compress before uploading.`;
+      status.style.color = '#991b1b';
+      return;
+    }
+
+    // Build the content array — PDFs as 'document', images as 'image' (compressed)
+    const content = [];
+    try {
+      for (const f of paperworkFiles) {
+        if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+          const b64 = await fileToBase64(f);
+          content.push({
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: b64 },
+          });
+        } else {
+          const { b64, mediaType } = await compressImageForVision(f);
+          content.push({
+            type: 'image',
+            source: { type: 'base64', media_type: mediaType, data: b64 },
+          });
+        }
+      }
+    } catch (err) {
+      status.textContent = 'Failed to read files: ' + (err.message || err);
+      status.style.color = '#991b1b';
+      return;
+    }
+
+    status.innerHTML = '<span class="spinner"></span> AI scanning paperwork and extracting fields…';
+
+    const prompt = `You are reading the sending-facility paperwork for an interfacility flight transport. The pages may include face sheets, H&P notes, MAR / medication lists, lab reports, imaging reports, and other documents.
+
+Return ONLY a JSON object of the form:
+{
+  "extracted": { ...schema below... },
+  "summary": "..."
+}
+
+The "extracted" object follows this schema (omit any keys you cannot fill — do not invent):
+{
+  "patient": { "name": "Last, First", "dob": "YYYY-MM-DD", "age": "", "sex": "Male|Female|Other", "mrn": "", "address": "", "height": "5'10\\" or 178 cm", "weight": "180 lb or 82 kg" },
+  "allergies": { "status": "has|nkda|nka", "items": [ { "allergen": "", "type": "Medication|Food|Environmental|Latex|Contrast|Insect/Sting|Other", "reaction": "" } ] },
+  "aircraft": "",
+  "callType": "ift|scene",
+  "times": { "roomEntry": "HH:MM 24h", "monitorApplied": "HH:MM 24h" },
+  "sending": { "hospital": "", "address": "", "nurse": "Name, CRED", "md": "Name, CRED", "agency": "", "county": "", "ambulance": "", "crew1": "Name, PARAMEDIC|EMT", "crew2": "Name, PARAMEDIC|EMT", "location": "", "lat": "", "lon": "", "mechanism": "" },
+  "receiving": { "hospital": "", "address": "", "md": "Name, CRED", "unit": "", "service": "" },
+  "diagnosis": "",
+  "timeFlags": [],
+  "timeFlagsOther": "",
+  "servicesUnavail": "",
+  "acuity": "Critical (Red)|Emergent (Yellow)|Stable (Green)",
+  "cc": "",
+  "onset": "",
+  "pmh": "",
+  "imaging": "",
+  "labs": "",
+  "labsStructured": [ { "name": "", "value": "", "unit": "", "flag": "H|L|critical|normal|" } ],
+  "bloodGas": { "type": "abg|vbg|none", "ph": "", "pco2": "", "po2": "", "hco3": "", "be": "", "lactate": "", "fio2": "", "sat": "", "time": "" },
+  "chem": { "na": "", "k": "", "cl": "", "bun": "", "cr": "", "glucose": "" },
+  "vitals": { "bp": "", "hr": "", "rr": "", "spo2": "", "temp": "", "glu": "", "o2dev": "" },
+  "assess": { "gcs": "", "pain": "", "rass": "", "skin": "", "pupils": "", "head": "", "cardiac": "", "lungs": "", "abd": "", "ext": "", "neuro": "" },
+  "ivs": [ "20g L forearm (NS @ 125 mL/hr)" ],
+  "meds": "",
+  "drips": "",
+  "rsi": "",
+  "sedation": "",
+  "vent": { "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "" },
+  "distance": { "dGround": "", "tGround": "", "dAir": "", "tAir": "" },
+  "bypass": "",
+  "airReason": "",
+  "belongings": "",
+  "briefed": ""
+}
+
+Rules for "extracted":
+- Preserve exact times, doses, and values from the paperwork. Do not round.
+- For "labsStructured", include every labeled lab value with its unit and any high/low flag shown.
+- For "allergies": if "NKDA" or "NKA" is written, use that status. Otherwise list each allergen with type and reaction.
+- For "ivs", convert to short strings.
+- For "diagnosis", consolidate primary working diagnosis from H&P / problem list.
+
+The "summary" string is a brief clinician-only synthesis (5–10 short sentences):
+- Why this patient needs transfer (problem + acuity)
+- Pertinent positives across the paperwork (what's wrong, what's been done, what's pending)
+- Outstanding concerns / things to monitor in flight
+- Use accepted critical-care abbreviations. No disclaimer text.
+
+Return ONLY the JSON object. No markdown fencing.`;
+
+    content.push({ type: 'text', text: prompt });
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': settings.anthropic,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: settings.model,
+          max_tokens: 8192,
+          messages: [{ role: 'user', content }],
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`API ${response.status}: ${err.slice(0, 300)}`);
+      }
+      const data = await response.json();
+      if (!data.content || !data.content[0] || !data.content[0].text) {
+        throw new Error('Unexpected API response');
+      }
+      let text = data.content[0].text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const parsed = JSON.parse(text);
+
+      if (parsed.extracted) {
+        applyExtractedData(parsed.extracted);
+      }
+
+      const summaryEl = $('paperworkSummary');
+      if (parsed.summary) {
+        summaryEl.style.display = 'block';
+        summaryEl.innerHTML = `<div class="tx-summary"><div class="tx-header">AI Summary of Uploaded Paperwork (not printed)</div>${escapeHtml(parsed.summary)}<div class="tx-disclaimer">Clinician-only reference. Verify against the original documents.</div></div>`;
+      }
+
+      status.innerHTML = '✓ Extracted into all relevant sections. Review every field before generating the final H&P.';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Paperwork extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    }
   }
 
   async function extractFromTranscript(){
