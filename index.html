@@ -780,6 +780,14 @@
             <button type="button" class="calc-btn" onclick="extractLicenseData()">🤖 Auto-fill from license (pilot — sends photo to AI)</button>
           </div>
           <div class="hint">Photo stays on device unless you click the AI extract button (pilot only).</div>
+
+          <label style="margin-top:10px">Face Sheet / Wristband / MRN Sticker Photo (for MRN auto-fill)</label>
+          <input type="file" id="ptFaceSheetFile" accept="image/*" capture="environment" onchange="handleFaceSheetPhoto(event)">
+          <div id="faceSheetPreview"></div>
+          <div id="faceSheetOcrBlock" style="display:none;margin-top:6px">
+            <button type="button" class="calc-btn" onclick="extractFaceSheetData()">🤖 Auto-fill MRN + demographics (pilot — sends photo to AI)</button>
+          </div>
+          <div class="hint">Photo of a hospital wristband, ID sticker, or printed face sheet. Stays on device unless you click extract. Not embedded in the printed report.</div>
         </div>
       </details>
     </fieldset>
@@ -1933,6 +1941,69 @@
       </div>
     `;
   }
+  // ====== Face sheet / wristband / MRN sticker photo ======
+  let faceSheetPhotoDataUrl = null;
+  function handleFaceSheetPhoto(event){
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      faceSheetPhotoDataUrl = e.target.result;
+      renderFaceSheetPreview();
+    };
+    reader.onerror = () => alert('Failed to read photo');
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  }
+  function clearFaceSheetPhoto(){
+    faceSheetPhotoDataUrl = null;
+    renderFaceSheetPreview();
+  }
+  function renderFaceSheetPreview(){
+    const wrap = $('faceSheetPreview');
+    if (!wrap) return;
+    if (!faceSheetPhotoDataUrl) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px">
+        <img src="${faceSheetPhotoDataUrl}" alt="Face sheet preview" style="max-width:180px;max-height:120px;border:1px solid #cbd5e1;border-radius:6px;object-fit:contain;background:#f8fafc">
+        <button type="button" class="clear-btn" onclick="clearFaceSheetPhoto()">Remove</button>
+      </div>
+    `;
+  }
+  async function extractFaceSheetData(){
+    if (!faceSheetPhotoDataUrl) { alert('Upload a face sheet/wristband photo first.'); return; }
+    if (!confirmPhi('facility face sheet / wristband')) return;
+    const resp = await fetch(faceSheetPhotoDataUrl);
+    const blob = await resp.blob();
+    const file = new File([blob], 'face-sheet.jpg', { type: blob.type || 'image/jpeg' });
+    const prompt = `Examine this hospital face sheet, patient wristband, or MRN sticker photo and extract the patient identifiers visible. Return ONLY a JSON object:
+{ "mrn": "", "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "", "sex": "M|F" }
+- "mrn" is the medical record number — usually prefixed letters then digits (e.g., "E1234567"), or a long numeric string. Sometimes labeled "MRN", "Med Rec #", "Patient ID", "Account #" — prefer the MRN/Med Rec # if multiple IDs are visible.
+- Omit fields you cannot read. Do not invent values.
+Return ONLY the JSON object, no markdown.`;
+    try {
+      let text = await callClaudeVisionMulti(prompt, [file]);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const data = JSON.parse(text);
+      const setIfEmpty = (id, v) => { if (v && $(id) && !$(id).value) $(id).value = v; };
+      setIfEmpty('ptMRN', data.mrn);
+      setIfEmpty('ptName', data.name);
+      setIfEmpty('ptDob', data.dob);
+      setIfEmpty('ptAddress', data.address);
+      if (data.sex && !val('ptSex')) {
+        $('ptSex').value = data.sex === 'M' ? 'Male' : (data.sex === 'F' ? 'Female' : '');
+      }
+      onDobChange();
+      const filled = Object.keys(data).filter(k => data[k]);
+      alert('Extracted: ' + (filled.length ? filled.join(', ') : 'no fields read'));
+    } catch (err) {
+      alert('Extraction failed: ' + (err.message || err));
+    }
+  }
+
   async function extractLicenseData(){
     if (!licensePhotoDataUrl) { alert('Upload a license photo first.'); return; }
     if (!confirmPhi("driver's license")) return;
@@ -2800,7 +2871,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   // ====== Photo OCR (Phase 4 — pilot only) ======
   function refreshPhotoOcrUi(){
     const on = loadSettings().photoOcr;
-    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'licenseOcrBlock'].forEach(id => {
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = on ? 'block' : 'none';
     });
@@ -3398,6 +3469,8 @@ ${JSON.stringify(data, null, 2)}`;
     document.querySelector('input[name=bgType][value=abg]').checked = true;
     licensePhotoDataUrl = null;
     renderLicensePreview();
+    faceSheetPhotoDataUrl = null;
+    renderFaceSheetPreview();
     if ($('ptHeightConv')) $('ptHeightConv').textContent = '';
     if ($('ptWeightConv')) $('ptWeightConv').textContent = '';
   }
