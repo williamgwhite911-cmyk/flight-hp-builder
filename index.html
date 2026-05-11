@@ -299,6 +299,69 @@
   button.copy-narrative { background: #0ea5e9; color: white; }
   button.copy-template { background: #16a34a; color: white; }
   button.copy-narrative.copied, button.copy-template.copied { background: #16a34a; }
+  button.print-report { background: #475569; color: white; }
+  button.print-report:hover { background: #334155; }
+
+  /* Print area — only visible when printing */
+  #printArea { display: none; }
+  @media print {
+    body { background: white; color: black; }
+    header, .tabs, .form, .output, .modal-backdrop { display: none !important; }
+    #printArea {
+      display: block;
+      padding: 0;
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: black;
+      font-size: 11pt;
+      line-height: 1.4;
+    }
+    #printArea h1 {
+      font-size: 16pt; margin: 0 0 4px;
+      border-bottom: 2px solid black; padding-bottom: 4px;
+    }
+    #printArea h2 {
+      font-size: 12pt; margin: 14px 0 4px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid black; padding-bottom: 2px;
+    }
+    #printArea .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 14px;
+      margin: 8px 0;
+      font-size: 10pt;
+    }
+    #printArea .meta b { display: inline-block; min-width: 110px; }
+    #printArea p, #printArea pre {
+      margin: 4px 0;
+      white-space: pre-wrap;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 11pt;
+    }
+    #printArea table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin: 4px 0;
+    }
+    #printArea th, #printArea td {
+      border: 1px solid #444;
+      padding: 4px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    #printArea th { background: #e5e5e5; }
+    #printArea .footer {
+      margin-top: 18px;
+      padding-top: 6px;
+      border-top: 1px solid #888;
+      font-size: 8pt;
+      color: #444;
+      font-style: italic;
+    }
+    @page { size: letter; margin: 0.5in; }
+  }
 
   .ai-status {
     font-size: 12px;
@@ -1257,6 +1320,7 @@
       <button class="generate-all" onclick="generateAll()" id="generateBtn" type="button">✨ Generate H&P with AI</button>
       <button class="copy-narrative" onclick="copyText('narrativeOut', this)" type="button">Copy Narrative</button>
       <button class="copy-template" onclick="copyText('templateOut', this)" type="button">Copy Template</button>
+      <button class="print-report" onclick="printReport()" type="button">🖨 Print / Save PDF</button>
     </div>
     <div class="ai-status" id="aiStatus"></div>
 
@@ -3481,8 +3545,209 @@ ${transcript}`;
     setStatus('No API key set yet. Tap ⚙ Settings to add your Anthropic key. Distance calculation also needs a Google Maps key.');
   }
 
+  // ====== Print report ======
+  function printReport(){
+    const d = gatherAllData();
+    const now = new Date();
+    const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+    const narrative = $('narrativeOut').textContent.trim();
+    const template = $('templateOut').textContent.trim();
+    const interpText = $('clinicalInterp') ? $('clinicalInterp').textContent.trim() : '';
+
+    // Build meta rows from whatever data we have
+    const meta = [];
+    if (d.statFlight) meta.push(['StatFlight', d.statFlight]);
+    if (d.crew) meta.push(['Flight Crew', d.crew]);
+    if (d.patient && (d.patient.age || d.patient.sex)) meta.push(['Patient', [d.patient.age, d.patient.sex].filter(Boolean).join(' yo ')]);
+    if (d.patient && d.patient.mrn) meta.push(['MRN', d.patient.mrn]);
+    if (d.mode === 'ift') {
+      if (d.sending && d.sending.hospital) meta.push(['Sending Facility', d.sending.hospital]);
+      if (d.sending && d.sending.nurse) meta.push(['Sending RN', d.sending.nurse]);
+      if (d.sending && d.sending.md) meta.push(['Sending MD', d.sending.md]);
+    } else {
+      if (d.sending && d.sending.agency) meta.push(['Sending Agency', d.sending.agency]);
+      if (d.sending && d.sending.county) meta.push(['County', d.sending.county]);
+      if (d.sending && d.sending.ambulance) meta.push(['Unit', d.sending.ambulance]);
+      if (d.sending && d.sending.crew1) meta.push(['Crew 1', d.sending.crew1]);
+      if (d.sending && d.sending.crew2) meta.push(['Crew 2', d.sending.crew2]);
+      if (d.sending && d.sending.location) meta.push(['Scene', d.sending.location]);
+    }
+    if (d.receiving && d.receiving.hospital) meta.push(['Receiving Facility', d.receiving.hospital]);
+    if (d.receiving && d.receiving.md) meta.push(['Accepting MD', d.receiving.md]);
+    if (d.receiving && d.receiving.unit) meta.push(['Admit To', d.receiving.unit]);
+    if (d.times && d.times.roomEntry) meta.push(['Room/Ambulance Entry', d.times.roomEntry]);
+    if (d.times && d.times.monitorApplied) meta.push(['Monitor Applied', d.times.monitorApplied]);
+    if (d.distance) {
+      const dG = d.distance.dGround, tG = d.distance.tGround, dA = d.distance.dAir, tA = d.distance.tAir;
+      if (dG || tG) meta.push(['Ground', `${dG || '—'} mi · ${tG || '—'} min`]);
+      if (dA || tA) meta.push(['Air', `${dA || '—'} mi · ${tA || '—'} min`]);
+    }
+    const diagnosis = combinedDiagnosis();
+
+    let html = '<h1>Flight Crew H&P Report</h1>';
+    html += '<div class="meta">';
+    html += `<div><b>Report generated:</b> ${escapeHtml(dateStr)} ${escapeHtml(timeStr)}</div>`;
+    html += `<div><b>Call type:</b> ${escapeHtml(d.mode === 'ift' ? 'Interfacility (IFT)' : 'Scene')}</div>`;
+    meta.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
+    html += '</div>';
+
+    if (diagnosis) {
+      html += '<h2>Diagnosis</h2>';
+      html += `<p>${escapeHtml(diagnosis)}</p>`;
+    }
+    if (Array.isArray(d.timeFlags) && d.timeFlags.length) {
+      html += '<h2>Time-Sensitive Flags</h2>';
+      html += `<p>${escapeHtml(d.timeFlags.join('; '))}</p>`;
+    }
+
+    if (narrative && narrative !== 'Click "Generate" to build the narrative paragraph here.') {
+      html += '<h2>Reason for Transport / H&P Narrative</h2>';
+      html += `<p>${escapeHtml(narrative)}</p>`;
+    }
+    if (template && template !== 'Click "Generate" to build the structured template here.') {
+      html += '<h2>StatFlight Template</h2>';
+      html += `<p>${escapeHtml(template)}</p>`;
+    }
+
+    // Bedside snapshot — vitals + assessment
+    const vitalsLines = [];
+    if (d.vitals) {
+      const v = d.vitals;
+      const parts = [];
+      if (v.bp) parts.push('BP ' + v.bp);
+      if (v.hr) parts.push('HR ' + v.hr);
+      if (v.rr) parts.push('RR ' + v.rr);
+      if (v.spo2) parts.push('SpO2 ' + v.spo2);
+      if (v.temp) parts.push('Temp ' + v.temp);
+      if (v.glu) parts.push('Glu ' + v.glu);
+      if (v.o2dev) parts.push('O2: ' + v.o2dev);
+      if (parts.length) vitalsLines.push(parts.join(' · '));
+    }
+    if (d.assess) {
+      const a = d.assess;
+      const parts = [];
+      if (a.gcs) parts.push('GCS ' + a.gcs);
+      if (a.pain) parts.push('Pain ' + a.pain);
+      if (a.rass) parts.push('RASS ' + a.rass);
+      if (parts.length) vitalsLines.push(parts.join(' · '));
+    }
+    if (vitalsLines.length) {
+      html += '<h2>Initial Vitals (PTA)</h2>';
+      html += `<p>${vitalsLines.map(escapeHtml).join('\n')}</p>`;
+    }
+
+    // ABG/VBG
+    if (d.bloodGas && (d.bloodGas.ph || d.bloodGas.pco2 || d.bloodGas.hco3)) {
+      const g = d.bloodGas;
+      const label = g.type === 'vbg' ? 'VBG' : 'ABG';
+      const pco2L = g.type === 'vbg' ? 'PvCO2' : 'PaCO2';
+      const po2L = g.type === 'vbg' ? 'PvO2' : 'PaO2';
+      const satL = g.type === 'vbg' ? 'SvO2' : 'SaO2';
+      const parts = [];
+      if (g.ph) parts.push('pH ' + g.ph);
+      if (g.pco2) parts.push(pco2L + ' ' + g.pco2);
+      if (g.po2) parts.push(po2L + ' ' + g.po2);
+      if (g.hco3) parts.push('HCO3 ' + g.hco3);
+      if (g.be) parts.push('BE ' + g.be);
+      if (g.lactate) parts.push('Lac ' + g.lactate);
+      if (g.fio2) parts.push('FiO2 ' + g.fio2);
+      if (g.sat) parts.push(satL + ' ' + g.sat);
+      if (g.time) parts.push('@ ' + g.time);
+      html += `<h2>${label}</h2>`;
+      html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
+    }
+
+    // Basic chem
+    if (d.chem) {
+      const c = d.chem;
+      const parts = [];
+      if (c.na) parts.push('Na ' + c.na);
+      if (c.k) parts.push('K ' + c.k);
+      if (c.cl) parts.push('Cl ' + c.cl);
+      if (c.bun) parts.push('BUN ' + c.bun);
+      if (c.cr) parts.push('Cr ' + c.cr);
+      if (c.glucose) parts.push('Glu ' + c.glucose);
+      if (parts.length) {
+        html += '<h2>Basic Chem</h2>';
+        html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
+      }
+    }
+
+    // Imaging
+    if (d.imaging) {
+      html += '<h2>Imaging</h2>';
+      html += `<p>${escapeHtml(d.imaging)}</p>`;
+    }
+
+    // Labs — both free text and structured
+    if (d.labs || (Array.isArray(d.labsStructured) && d.labsStructured.length)) {
+      html += '<h2>Labs</h2>';
+      if (d.labs) html += `<p>${escapeHtml(d.labs)}</p>`;
+      if (Array.isArray(d.labsStructured) && d.labsStructured.length) {
+        html += '<table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Flag</th></tr></thead><tbody>';
+        d.labsStructured.forEach(r => {
+          html += `<tr><td>${escapeHtml(r.name || '')}</td><td>${escapeHtml(r.value || '')}</td><td>${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.flag || '')}</td></tr>`;
+        });
+        html += '</tbody></table>';
+      }
+    }
+
+    // Medications + drips
+    if (d.meds || d.drips || d.rsi || d.sedation) {
+      html += '<h2>Medications / Drips</h2>';
+      if (d.meds) html += `<p><b>Given PTA:</b> ${escapeHtml(d.meds)}</p>`;
+      if (d.drips) html += `<p><b>Active drips:</b> ${escapeHtml(d.drips)}</p>`;
+      if (d.rsi) html += `<p><b>RSI:</b> ${escapeHtml(d.rsi)}</p>`;
+      if (d.sedation) html += `<p><b>Sedation:</b> ${escapeHtml(d.sedation)}</p>`;
+    }
+
+    // IVs
+    if (Array.isArray(d.ivs) && d.ivs.length) {
+      html += '<h2>IV Access</h2>';
+      html += `<p>${escapeHtml(d.ivs.join('; '))}</p>`;
+    }
+
+    // Vent settings
+    if (d.vent) {
+      const v = d.vent;
+      const parts = [];
+      if (v.mode) parts.push('Mode ' + v.mode);
+      if (v.fio2) parts.push('FiO2 ' + v.fio2);
+      if (v.tv) parts.push('TV ' + v.tv);
+      if (v.rate) parts.push('Rate ' + v.rate);
+      if (v.peep) parts.push('PEEP ' + v.peep);
+      if (v.ps) parts.push('PS ' + v.ps);
+      if (parts.length) {
+        html += '<h2>Ventilator Settings</h2>';
+        html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
+      }
+    }
+
+    // Mode justification
+    if (d.airReason || d.bypass) {
+      html += '<h2>Mode of Transport Justification</h2>';
+      if (d.airReason) html += `<p>${escapeHtml(d.airReason)}</p>`;
+      if (d.bypass) html += `<p><b>Bypassed facility:</b> ${escapeHtml(d.bypass)}</p>`;
+    }
+
+    // Clinical interpretation (only if AI generated something)
+    if (interpText && !/click the button/i.test(interpText)) {
+      html += '<h2>Clinical Interpretation (AI reference)</h2>';
+      html += `<p>${escapeHtml(interpText)}</p>`;
+    }
+
+    html += `<div class="footer">Generated by Flight Crew H&P Builder on ${escapeHtml(dateStr)} at ${escapeHtml(timeStr)}. AI-generated content; verify against protocol and physician orders.</div>`;
+
+    $('printArea').innerHTML = html;
+    // Give the browser a tick to paint, then print
+    setTimeout(() => window.print(), 50);
+  }
+
   // Init
   addIvLine();
 </script>
+<div id="printArea"></div>
 </body>
 </html>
