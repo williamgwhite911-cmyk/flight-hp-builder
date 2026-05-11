@@ -3750,6 +3750,7 @@ ${JSON.stringify(data, null, 2)}`;
       $('templateOut').textContent = parsed.template || '';
       $('narrativeOut').classList.add('polished');
       $('templateOut').classList.add('polished');
+      lastMedications = Array.isArray(parsed.medications) ? parsed.medications : [];
       renderMedSummary(parsed.medications);
       runComplianceCheck(data, parsed.narrative || '');
       btn.disabled = false;
@@ -3764,6 +3765,8 @@ ${JSON.stringify(data, null, 2)}`;
   }
 
   // ====== Medication Summary (Phase 3b) ======
+  // Cached AI-extracted medications array — reused by printReport().
+  let lastMedications = [];
   function renderMedSummary(meds){
     const box = $('medSummary');
     if (!Array.isArray(meds) || !meds.length) {
@@ -4524,17 +4527,37 @@ ${transcript}`;
       }
     }
 
-    // Imaging
-    if (d.imaging) {
-      html += '<h2>Imaging</h2>';
-      html += `<p>${escapeHtml(d.imaging)}</p>`;
+    // History & Presentation — CC, Onset, PMH as separate paragraphs
+    if (d.cc || d.onset || d.pmh) {
+      html += '<h2>History &amp; Presentation</h2>';
+      if (d.cc)    html += `<p><b>Chief Complaint:</b> ${escapeHtml(d.cc)}</p>`;
+      if (d.onset) html += `<p><b>Onset / Events Leading Up:</b> ${escapeHtml(d.onset)}</p>`;
+      if (d.pmh)   html += `<p><b>Past Medical History:</b> ${escapeHtml(d.pmh)}</p>`;
     }
 
-    // Labs — both free text and structured
+    // Helper: split a multi-line block into separate <p> paragraphs.
+    const paragraphize = (text) => {
+      if (!text) return '';
+      return text
+        .split(/\r?\n+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => `<p>${escapeHtml(s)}</p>`)
+        .join('');
+    };
+
+    // Imaging — each line becomes its own paragraph
+    if (d.imaging) {
+      html += '<h2>Imaging</h2>';
+      html += paragraphize(d.imaging);
+    }
+
+    // Labs — free-text paragraphs, then structured table as a separate block
     if (d.labs || (Array.isArray(d.labsStructured) && d.labsStructured.length)) {
       html += '<h2>Labs</h2>';
-      if (d.labs) html += `<p>${escapeHtml(d.labs)}</p>`;
+      if (d.labs) html += paragraphize(d.labs);
       if (Array.isArray(d.labsStructured) && d.labsStructured.length) {
+        html += '<p><b>Structured results:</b></p>';
         html += '<table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Flag</th></tr></thead><tbody>';
         const flagLabel = f => f === 'H' ? 'HIGH' : f === 'L' ? 'LOW' : f === 'critical' ? 'CRITICAL' : f === 'normal' ? 'normal' : '';
         d.labsStructured.forEach(r => {
@@ -4544,13 +4567,38 @@ ${transcript}`;
       }
     }
 
-    // Medications + drips
+    // Medications + drips — each subsection as its own paragraph
     if (d.meds || d.drips || d.rsi || d.sedation) {
       html += '<h2>Medications / Drips</h2>';
-      if (d.meds) html += `<p><b>Given PTA:</b> ${escapeHtml(d.meds)}</p>`;
-      if (d.drips) html += `<p><b>Active drips:</b> ${escapeHtml(d.drips)}</p>`;
-      if (d.rsi) html += `<p><b>RSI:</b> ${escapeHtml(d.rsi)}</p>`;
-      if (d.sedation) html += `<p><b>Sedation:</b> ${escapeHtml(d.sedation)}</p>`;
+      if (d.meds)     { html += '<p><b>Given Prior to Flight Crew Arrival</b></p>'; html += paragraphize(d.meds); }
+      if (d.drips)    { html += '<p><b>Active Drips at Arrival</b></p>';            html += paragraphize(d.drips); }
+      if (d.rsi)      { html += '<p><b>RSI Agents</b></p>';                          html += paragraphize(d.rsi); }
+      if (d.sedation) { html += '<p><b>Sedation Drips</b></p>';                       html += paragraphize(d.sedation); }
+    }
+
+    // AI-extracted Medication Summary table (from the H&P generation)
+    if (Array.isArray(lastMedications) && lastMedications.length) {
+      const cols = [
+        { key: 'name', label: 'Medication' },
+        { key: 'dose', label: 'Dose' },
+        { key: 'concentration', label: 'Concentration' },
+        { key: 'route', label: 'Route' },
+        { key: 'time', label: 'Time' },
+        { key: 'indication', label: 'Indication' },
+        { key: 'notes', label: 'Notes' },
+      ].filter(c => lastMedications.some(m => m && m[c.key] && String(m[c.key]).trim()));
+      if (cols.length) {
+        html += '<h2>Medication Summary</h2>';
+        html += '<table><thead><tr>';
+        cols.forEach(c => { html += `<th>${escapeHtml(c.label)}</th>`; });
+        html += '</tr></thead><tbody>';
+        lastMedications.forEach(m => {
+          html += '<tr>';
+          cols.forEach(c => { html += `<td>${escapeHtml((m && m[c.key]) || '')}</td>`; });
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      }
     }
 
     // IVs
