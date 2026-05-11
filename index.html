@@ -284,6 +284,25 @@
   .compliance .check.partial { color: #d97706; }
   .compliance .check.missing { color: #dc2626; }
   .compliance .check.na { color: #94a3b8; }
+  .compliance .clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+  .compliance .check.clickable { text-decoration: none; }
+  .compliance .clickable:hover { color: #0c4a6e; background: #f0f9ff; border-radius: 4px; }
+
+  /* Briefly flash a form field when navigated to via compliance click */
+  @keyframes hpFlashRing {
+    0%   { box-shadow: 0 0 0 0 rgba(14,165,233,0.0); }
+    20%  { box-shadow: 0 0 0 6px rgba(14,165,233,0.55); }
+    100% { box-shadow: 0 0 0 0 rgba(14,165,233,0.0); }
+  }
+  .highlight-flash {
+    animation: hpFlashRing 1.5s ease-out;
+    border-radius: 8px;
+  }
 
   .top-actions {
     display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;
@@ -3565,32 +3584,66 @@ ${JSON.stringify(data, null, 2)}`;
   }
 
   // ====== Compliance check ======
+  // Scroll/open/focus a form field given its id. Walks up the DOM tree to open
+  // any closed <details> ancestors, switches to the form tab on mobile, then
+  // smooth-scrolls and briefly flashes the field.
+  function scrollToField(fieldId){
+    const el = $(fieldId);
+    if (!el) return;
+    let parent = el.parentElement;
+    while (parent && parent !== document.body) {
+      if (parent.tagName === 'DETAILS') parent.open = true;
+      parent = parent.parentElement;
+    }
+    if (window.matchMedia('(max-width: 1000px)').matches) {
+      switchTab('form');
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => {
+      try { if (el.focus) el.focus({ preventScroll: true }); } catch(e) {}
+      el.classList.add('highlight-flash');
+      setTimeout(() => el.classList.remove('highlight-flash'), 1500);
+    }, 350);
+  }
+
   function runComplianceCheck(data, narrative){
     const checks = [
       { id: 1, label: '1. Who requested transport (name + title)',
-        test: () => (data.mode === 'ift' ? data.sending.nurse : data.sending.provider) },
+        test: () => (data.mode === 'ift' ? data.sending.nurse : data.sending.crew1 || data.sending.provider),
+        target: () => data.mode === 'ift' ? 'sendNurseName' : 'sceneCrew1Name' },
       { id: 2, label: '2. Requesting Agency / Facility',
-        test: () => (data.mode === 'ift' ? data.sending.hospital : data.sending.agency) },
+        test: () => (data.mode === 'ift' ? data.sending.hospital : data.sending.agency),
+        target: () => data.mode === 'ift' ? 'sendHospName' : 'sceneAgency' },
       { id: 3, label: '3. Requesting Provider full name + credentials',
-        test: () => (data.mode === 'ift' ? data.sending.md : data.sending.provider) },
+        test: () => (data.mode === 'ift' ? data.sending.md : data.sending.crew1 || data.sending.provider),
+        target: () => data.mode === 'ift' ? 'sendMDName' : 'sceneCrew1Name' },
       { id: 4, label: '4. Clinical Services NOT Available',
-        test: () => data.servicesUnavail },
+        test: () => data.servicesUnavail,
+        target: 'servicesUnavail' },
       { id: 5, label: "5. Patient's Summarized Condition / Diagnosis",
-        test: () => data.diagnosis },
+        test: () => data.diagnosis,
+        target: 'dxSearch' },
       { id: 6, label: '6. Time-Dependent Illness Flag',
-        test: () => data.timeFlags.length > 0 },
+        test: () => data.timeFlags.length > 0,
+        target: 'tsOther' },
       { id: 7, label: '7. Mode of Transport rationale',
-        test: () => data.airReason },
+        test: () => data.airReason,
+        target: 'airReason' },
       { id: 8, label: '8. Air Transport Considerations (CCN, ground limits)',
-        test: () => /CCN|critical[\- ]care|ALS|ground|paramedic/i.test(narrative) },
+        test: () => /CCN|critical[\- ]care|ALS|ground|paramedic/i.test(narrative),
+        target: 'airReason' },
       { id: 9, label: '9. Ground time in minutes (per Google Maps)',
-        test: () => data.distance.tGround },
+        test: () => data.distance.tGround,
+        target: 'tGround' },
       { id: 10, label: '10. Receiving Destination + Capabilities',
-        test: () => data.receiving.hospital && (data.receiving.service || data.servicesUnavail) },
+        test: () => data.receiving.hospital && (data.receiving.service || data.servicesUnavail),
+        target: 'recvHosp' },
       { id: 11, label: '11. Bypassed Facility Explanation (if any)',
-        test: () => data.bypass || /bypass/i.test(narrative) },
+        test: () => data.bypass || /bypass/i.test(narrative),
+        target: 'bypass' },
       { id: 12, label: '12. HPI: symptoms + history + events + interventions PTA',
-        test: () => data.cc && data.onset && (data.meds || data.drips) },
+        test: () => data.cc && data.onset && (data.meds || data.drips),
+        target: () => !data.cc ? 'cc' : (!data.onset ? 'onset' : 'medsPTA') },
     ];
     const list = $('complianceList');
     list.innerHTML = '';
@@ -3603,6 +3656,17 @@ ${JSON.stringify(data, null, 2)}`;
       cell1.textContent = symbol;
       const cell2 = document.createElement('div');
       cell2.textContent = c.label;
+      if (status === 'missing' && c.target) {
+        const targetId = typeof c.target === 'function' ? c.target() : c.target;
+        if (targetId) {
+          cell1.classList.add('clickable');
+          cell2.classList.add('clickable');
+          cell2.title = 'Click to jump to this field';
+          const handler = () => scrollToField(targetId);
+          cell1.addEventListener('click', handler);
+          cell2.addEventListener('click', handler);
+        }
+      }
       list.appendChild(cell1);
       list.appendChild(cell2);
     });
