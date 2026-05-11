@@ -977,45 +977,49 @@
           <label>Bypassed Closer Facility (if any) + Reason</label>
           <textarea id="bypass" placeholder="Eskenazi Health was contacted as a closer alternative; bypassed because patient was accepted at Methodist for combined GI/cardiac/pulmonary capability."></textarea>
 
-          <label>Why Air vs Ground (factors)</label>
-          <textarea id="airReason" placeholder="Time-sensitive surgical urgency; CCN-level monitoring not available on regional ground ALS; significant time savings"></textarea>
-
-          <label>Ground Transport Justification (insurance-accepted reason; pick one or more)</label>
-          <select id="groundReason" onchange="addGroundReason()">
-            <option value="">— Pick to add to justification —</option>
-            <optgroup label="Weather / Operational">
-              <option>All regional air assets grounded due to weather (ceiling/visibility below VFR/IFR minimums)</option>
-              <option>Helicopter mechanical / maintenance grounding</option>
-              <option>Night IFR operating limits exceed safe envelope at receiving LZ</option>
-              <option>Lightning / thunderstorm activity along flight corridor</option>
-              <option>Icing conditions exceed aircraft capability</option>
+          <label>Why Air vs Ground (insurance-accepted; pick one or more, then edit freely)</label>
+          <select id="airReasonPicker" onchange="addAirReason()">
+            <option value="">— Pick to add a reason —</option>
+            <optgroup label="Time-sensitive clinical urgency">
+              <option>STEMI requiring catheterization within 90-minute first-medical-contact window</option>
+              <option>Acute ischemic stroke within thrombectomy / tPA treatment window</option>
+              <option>Massive pulmonary embolism requiring thrombolytic and tertiary-care intervention</option>
+              <option>Trauma alert with active hemorrhage; need rapid time to definitive surgical care</option>
+              <option>Aortic dissection requiring cardiothoracic surgical intervention</option>
+              <option>Time-sensitive obstetric emergency (placental abruption, cord prolapse, uterine rupture)</option>
+              <option>Surgical emergency with risk of decompensation (perforation, mesenteric ischemia, AAA)</option>
+              <option>Refractory anaphylaxis or airway emergency requiring tertiary care</option>
             </optgroup>
-            <optgroup label="Patient-related clinical factors">
-              <option>Patient body habitus / weight exceeds aircraft stretcher or weight-and-balance limits</option>
-              <option>Patient requires therapy not supported in-flight (e.g., IABP, Impella, ECMO without flight team)</option>
-              <option>Patient too unstable for altitude (severe air-trapping, untreated PTX, severe decompression risk)</option>
-              <option>Active combative behavior with ineffective chemical restraint</option>
-              <option>Open or partially treated pneumothorax without chest tube</option>
-              <option>Severe hypoxia refractory to maximal vent settings</option>
-              <option>Recent dive injury / decompression sickness (altitude contraindicated)</option>
-              <option>Bowel obstruction with risk of altitude-related expansion</option>
+            <optgroup label="Care-level mismatch (capability not available on ground)">
+              <option>Critical-care nurse (CCN) level monitoring not available on regional ground ALS</option>
+              <option>Active titration of multiple vasoactive or sedation drips beyond ground ALS scope</option>
+              <option>Ventilated patient requiring ICU-level respiratory management throughout transport</option>
+              <option>IABP / Impella / ECMO transfer requires specialty flight team</option>
+              <option>Pediatric specialty team required (PICU/NICU level care)</option>
+              <option>High-risk OB / neonatal transport requiring specialty team</option>
+              <option>Burn center transport with airway and fluid resuscitation needs</option>
             </optgroup>
-            <optgroup label="Distance / time factors">
-              <option>Ground transport time savings negligible due to short distance (&lt; 45 ground miles)</option>
-              <option>Receiving facility lacks suitable LZ; ground transfer from LZ would negate time savings</option>
-              <option>Urban traffic and proximity to receiving facility make ground equal or faster</option>
+            <optgroup label="Time savings (distance / geography)">
+              <option>Significant time savings vs ground (>30-minute differential demonstrated)</option>
+              <option>Receiving facility remote from sending hospital; ground time exceeds 60 minutes</option>
+              <option>Receiving facility has on-site helipad; faster door-to-treatment</option>
+              <option>Sending facility in rural area; closest air-capable resource</option>
+              <option>Ground route through congested corridor with documented delays</option>
             </optgroup>
-            <optgroup label="Family / patient factors">
-              <option>Patient or legally authorized representative declined air transport</option>
-              <option>Religious or cultural objection to air transport documented</option>
+            <optgroup label="Patient stability / clinical risk">
+              <option>Hemodynamic instability requiring rapid arrival at definitive care</option>
+              <option>Refractory respiratory failure requiring advanced ventilation strategy</option>
+              <option>Severe TBI requiring neurosurgical evaluation and intervention</option>
+              <option>Crashing patient with risk of arrest during prolonged ground transport</option>
             </optgroup>
-            <optgroup label="Receiving facility factors">
-              <option>Receiving facility's helipad closed / under maintenance</option>
-              <option>Receiving facility requested ground due to ED diversion of air arrivals</option>
+            <optgroup label="Resource / operational">
+              <option>Closer facility lacks the required capability; bypass to higher level of care justified</option>
+              <option>Ground critical-care resource unavailable in service area</option>
+              <option>All regional ground critical-care units committed; air is the only timely option</option>
             </optgroup>
           </select>
-          <textarea id="groundReasonText" rows="3" placeholder="Selected reasons appear here. Edit freely."></textarea>
-          <button type="button" class="add-btn" onclick="$('groundReasonText').value=''" style="background:#fee2e2;color:#991b1b;border-color:#fecaca">Clear ground reasons</button>
+          <textarea id="airReason" rows="3" placeholder="Pick from the dropdown above or type freely. Multiple reasons appear as bullets."></textarea>
+          <button type="button" class="add-btn" onclick="$('airReason').value=''" style="background:#fee2e2;color:#991b1b;border-color:#fecaca">Clear reasons</button>
         </div>
       </details>
     </fieldset>
@@ -1989,10 +1993,11 @@ Return plain text only.`;
     $('dripWarn').textContent = '';
   }
 
-  // Ground transport reason chooser — appends the selected option as a bullet line.
-  function addGroundReason(){
-    const sel = $('groundReason');
-    const txt = $('groundReasonText');
+  // Air-vs-ground justification chooser — appends the selected option as a bullet
+  // to the free-text airReason field. Caller can edit freely afterward.
+  function addAirReason(){
+    const sel = $('airReasonPicker');
+    const txt = $('airReason');
     const v = sel.value;
     if (!v) return;
     const existing = txt.value.trim();
@@ -2199,7 +2204,6 @@ Return plain text only.`;
                   dAir: val('dAir'), tAir: val('tAir') },
       bypass: val('bypass'),
       airReason: val('airReason'),
-      groundReason: val('groundReasonText'),
       belongings: val('belongings'),
       briefed: val('briefed'),
     };
@@ -2640,7 +2644,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     dxSelected.length = 0;
     renderDxChips();
     if ($('dxSearch')) $('dxSearch').value = '';
-    if ($('groundReasonText')) $('groundReasonText').value = '';
+    if ($('airReasonPicker')) $('airReasonPicker').selectedIndex = 0;
     if ($('txSummary')) $('txSummary').innerHTML = '';
     if ($('medSummary')) $('medSummary').innerHTML = '';
   }
