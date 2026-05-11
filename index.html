@@ -2049,11 +2049,14 @@ Return plain text only.`;
       travelMode: 'DRIVE',
       units: 'IMPERIAL',
     };
-    const res = await fetch(ROUTES_MATRIX_URL, {
+    // Use ?key= URL param for auth instead of X-Goog-Api-Key header — same method
+    // that works on the legacy maps.googleapis.com endpoints. Avoids edge cases
+    // where the header form is rejected on a fresh key.
+    const url = `${ROUTES_MATRIX_URL}?key=${encodeURIComponent(key)}`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Goog-Api-Key': key,
         'X-Goog-FieldMask': 'originIndex,destinationIndex,duration,distanceMeters,status,condition',
       },
       body: JSON.stringify(body),
