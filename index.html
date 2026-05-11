@@ -323,6 +323,27 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Time-sensitive condition checkboxes */
+  .ts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 8px;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .ts-cb {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    font-weight: normal;
+    margin: 0;
+    padding: 4px 0;
+    line-height: 1.25;
+  }
+  @media (max-width: 1000px) {
+    .ts-grid { grid-template-columns: 1fr 1fr; font-size: 13px; }
+  }
+
   /* ICD-10 search */
   .icd-search-wrap { position: relative; }
   .icd-results {
@@ -722,19 +743,49 @@
           <label>Additional Free-Text Diagnosis / Notes</label>
           <textarea id="diagnosis" placeholder="Add free-text notes here. ICD-10 chips above are merged automatically when the H&P is generated."></textarea>
           <label>Time-Sensitive Conditions (check all that apply)</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="STEMI"> STEMI</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="MI / NSTEMI"> MI / NSTEMI</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="LVO Stroke"> LVO Stroke</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="Stroke (general)"> Stroke (general)</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="GSW (gunshot wound)"> GSW</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="Trauma / hemorrhage"> Trauma / hemorrhage</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="Status Epilepticus"> Status Epilepticus</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="Sepsis"> Sepsis</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="Surgical emergency (perforation, AAA, etc.)"> Surgical emergency</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="Aortic dissection"> Aortic dissection</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="Refractory respiratory failure"> Resp failure</label>
-            <label style="display:flex;gap:6px;align-items:center;font-weight:normal"><input type="checkbox" class="ts-flag" value="OB / neonatal emergency"> OB / neonatal</label>
+          <div class="ts-grid">
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="STEMI"> STEMI</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="MI / NSTEMI"> MI / NSTEMI</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Cardiogenic shock"> Cardiogenic shock</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Post-arrest / ROSC"> Post-arrest / ROSC</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="LVO Stroke"> LVO Stroke</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Stroke (general)"> Stroke (general)</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Intracerebral hemorrhage (ICH)"> ICH</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Subarachnoid hemorrhage (SAH)"> SAH</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Severe TBI"> Severe TBI</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Spinal cord injury"> Spinal cord injury</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Status Epilepticus"> Status epilepticus</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="GSW (gunshot wound)"> GSW</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Trauma / hemorrhage"> Trauma / hemorrhage</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Active hemorrhage on anticoagulation"> Hemorrhage on AC</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Major burn / inhalation injury"> Major burn / inhalation</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Massive transfusion / hemorrhagic shock"> MTP / hemorrhagic shock</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Tension pneumothorax"> Tension PTX</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Massive pulmonary embolism"> Massive PE</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Refractory respiratory failure"> Refractory resp failure</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Aortic dissection"> Aortic dissection</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Ruptured AAA"> Ruptured AAA</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Mesenteric ischemia"> Mesenteric ischemia</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Surgical emergency (perforation, obstruction, etc.)"> Surgical emergency</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Necrotizing fasciitis"> Nec fasc</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Sepsis"> Sepsis</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Septic shock"> Septic shock</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Refractory anaphylaxis"> Refractory anaphylaxis</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Severe DKA / HHS"> Severe DKA / HHS</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Severe hyperkalemia"> Severe hyperkalemia</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Acute hepatic failure"> Acute liver failure</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Eclampsia / HELLP"> Eclampsia / HELLP</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Postpartum hemorrhage"> PPH</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="OB / neonatal emergency"> OB / neonatal</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Cord prolapse"> Cord prolapse</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Pediatric critical care transfer"> Peds critical care</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="ECMO / IABP / Impella transfer"> ECMO/IABP/Impella</label>
+            <label class="ts-cb"><input type="checkbox" class="ts-flag" value="Toxic ingestion requiring antidote"> Toxic ingestion</label>
+          </div>
+          <label style="margin-top:6px">Other time-sensitive condition (free text)</label>
+          <div class="input-clear-row">
+            <input type="text" id="tsOther" placeholder="e.g., 'crush syndrome with hyperkalemia'; 'envenomation requiring antivenin'">
+            <button type="button" class="clear-btn" onclick="$('tsOther').value=''" title="Clear">✕</button>
           </div>
           <label>Clinical Services NOT Available at Pickup Location</label>
           <textarea id="servicesUnavail" placeholder="GI surgery; cardiac surgery; complicated pulmonary care; ECMO; etc."></textarea>
@@ -1614,7 +1665,10 @@
 
   // Time-sensitive flags
   function gatherTSFlags(){
-    return Array.from(document.querySelectorAll('.ts-flag:checked')).map(c => c.value);
+    const flags = Array.from(document.querySelectorAll('.ts-flag:checked')).map(c => c.value);
+    const other = val('tsOther');
+    if (other) flags.push(other);
+    return flags;
   }
 
   // ====== Diagnosis Picker (curated flight-transport list) ======
@@ -2807,7 +2861,8 @@ Schema:
   },
   "receiving": { "hospital": "", "address": "", "md": "", "unit": "", "service": "" },
   "diagnosis": "",
-  "timeFlags": ["STEMI" | "MI / NSTEMI" | "LVO Stroke" | "Stroke (general)" | "GSW (gunshot wound)" | "Trauma / hemorrhage" | "Status Epilepticus" | "Sepsis" | "Surgical emergency (perforation, AAA, etc.)" | "Aortic dissection" | "Refractory respiratory failure" | "OB / neonatal emergency"],
+  "timeFlags": ["STEMI" | "MI / NSTEMI" | "Cardiogenic shock" | "Post-arrest / ROSC" | "LVO Stroke" | "Stroke (general)" | "Intracerebral hemorrhage (ICH)" | "Subarachnoid hemorrhage (SAH)" | "Severe TBI" | "Spinal cord injury" | "Status Epilepticus" | "GSW (gunshot wound)" | "Trauma / hemorrhage" | "Active hemorrhage on anticoagulation" | "Major burn / inhalation injury" | "Massive transfusion / hemorrhagic shock" | "Tension pneumothorax" | "Massive pulmonary embolism" | "Refractory respiratory failure" | "Aortic dissection" | "Ruptured AAA" | "Mesenteric ischemia" | "Surgical emergency (perforation, obstruction, etc.)" | "Necrotizing fasciitis" | "Sepsis" | "Septic shock" | "Refractory anaphylaxis" | "Severe DKA / HHS" | "Severe hyperkalemia" | "Acute hepatic failure" | "Eclampsia / HELLP" | "Postpartum hemorrhage" | "OB / neonatal emergency" | "Cord prolapse" | "Pediatric critical care transfer" | "ECMO / IABP / Impella transfer" | "Toxic ingestion requiring antidote"],
+  "timeFlagsOther": "any time-sensitive condition not in the list above; free text",
   "servicesUnavail": "",
   "acuity": "Critical (Red)|Emergent (Yellow)|Stable (Green)",
   "cc": "",
@@ -2953,6 +3008,7 @@ ${transcript}`;
         if (cb) cb.checked = true;
       });
     }
+    setIf('tsOther', d.timeFlagsOther);
 
     autoFillHospAddr('send');
     autoFillHospAddr('recv');
