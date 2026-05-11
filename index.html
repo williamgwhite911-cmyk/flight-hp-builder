@@ -352,6 +352,15 @@
       vertical-align: top;
     }
     #printArea th { background: #e5e5e5; }
+    #printArea tr.lab-print-H td:nth-child(2),
+    #printArea tr.lab-print-H td:nth-child(4) { font-weight: 700; }
+    #printArea tr.lab-print-H td:nth-child(4) { color: #92400e; }
+    #printArea tr.lab-print-L td:nth-child(2),
+    #printArea tr.lab-print-L td:nth-child(4) { font-weight: 700; }
+    #printArea tr.lab-print-L td:nth-child(4) { color: #1e40af; }
+    #printArea tr.lab-print-critical td { background: #fee2e2; font-weight: 800; }
+    #printArea tr.lab-print-critical td:nth-child(4) { color: #991b1b; }
+    #printArea tr.lab-print-normal td:nth-child(4) { color: #166534; font-style: italic; }
     #printArea .footer {
       margin-top: 18px;
       padding-top: 6px;
@@ -431,6 +440,14 @@
   .lab-row[data-flag="L"] select { background: #dbeafe; color: #1e40af; font-weight: 700; }
   .lab-row[data-flag="critical"] select { background: #fee2e2; color: #991b1b; font-weight: 700; }
   .lab-row[data-flag="normal"] select { background: #dcfce7; color: #166534; }
+  .lab-row[data-flag="H"] .lab-value { color: #92400e; font-weight: 700; }
+  .lab-row[data-flag="L"] .lab-value { color: #1e40af; font-weight: 700; }
+  .lab-row[data-flag="critical"] .lab-value { color: #991b1b; font-weight: 800; background: #fef2f2; }
+  .lab-row[data-flag="normal"] .lab-value { color: #166534; }
+  .lab-row[data-flag="H"]        { box-shadow: inset 4px 0 0 #f59e0b; padding-left: 6px; }
+  .lab-row[data-flag="L"]        { box-shadow: inset 4px 0 0 #3b82f6; padding-left: 6px; }
+  .lab-row[data-flag="critical"] { box-shadow: inset 4px 0 0 #dc2626; padding-left: 6px; background: #fffbfb; }
+  .lab-row[data-flag="normal"]   { box-shadow: inset 4px 0 0 #22c55e; padding-left: 6px; }
   @media (max-width: 600px) {
     .lab-row { grid-template-columns: 1.2fr 1fr 0.8fr 0.6fr 28px; font-size: 12px; }
   }
@@ -3112,6 +3129,78 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
 
   // ====== Lab rows (structured) ======
   function attrEsc(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+  // ====== Common adult lab reference ranges (US units) ======
+  // Used to auto-flag rows H / L / critical / normal based on the value typed.
+  // Ranges are intentionally a bit wide (use the broader of sex-specific ranges).
+  // critHigh / critLow are crisis thresholds.
+  const LAB_REF = {
+    wbc:     { low: 4.0,  high: 11.0, critLow: 1.0,  critHigh: 30,   aliases: ['wbc', 'white blood cells', 'leukocytes', 'white cell count'] },
+    rbc:     { low: 4.2,  high: 6.1,                                aliases: ['rbc', 'red blood cells'] },
+    hgb:     { low: 12.0, high: 17.5, critLow: 7,    critHigh: 20,   aliases: ['hgb', 'hb', 'hemoglobin'] },
+    hct:     { low: 36,   high: 52,                                  aliases: ['hct', 'hematocrit'] },
+    plt:     { low: 150,  high: 400,  critLow: 50,   critHigh: 1000, aliases: ['plt', 'platelets', 'platelet count'] },
+    mcv:     { low: 80,   high: 100,                                 aliases: ['mcv'] },
+    na:      { low: 135,  high: 145,  critLow: 120,  critHigh: 160,  aliases: ['na', 'sodium'] },
+    k:       { low: 3.5,  high: 5.1,  critLow: 2.5,  critHigh: 6.5,  aliases: ['k', 'potassium'] },
+    cl:      { low: 98,   high: 107,                                 aliases: ['cl', 'chloride'] },
+    co2:     { low: 22,   high: 30,                                  aliases: ['co2', 'bicarbonate', 'hco3', 'bicarb'] },
+    bun:     { low: 7,    high: 20,                                  aliases: ['bun', 'urea nitrogen'] },
+    cr:      { low: 0.6,  high: 1.3,                                 aliases: ['cr', 'creatinine'] },
+    egfr:    { low: 60,   high: 200,                                 aliases: ['egfr', 'gfr'] },
+    glu:     { low: 70,   high: 110,  critLow: 40,   critHigh: 500,  aliases: ['glu', 'glucose', 'blood glucose'] },
+    ca:      { low: 8.5,  high: 10.5, critLow: 6,    critHigh: 13,   aliases: ['ca', 'calcium'] },
+    mg:      { low: 1.7,  high: 2.4,  critLow: 1.0,  critHigh: 4.0,  aliases: ['mg', 'magnesium'] },
+    phos:    { low: 2.5,  high: 4.5,                                 aliases: ['phos', 'phosphate', 'phosphorus'] },
+    alb:     { low: 3.5,  high: 5.0,                                 aliases: ['alb', 'albumin'] },
+    tprot:   { low: 6.0,  high: 8.0,                                 aliases: ['total protein', 'tprot', 'protein'] },
+    ast:     { low: 10,   high: 40,                                  aliases: ['ast', 'sgot'] },
+    alt:     { low: 7,    high: 56,                                  aliases: ['alt', 'sgpt'] },
+    alk:     { low: 44,   high: 147,                                 aliases: ['alk phos', 'alkaline phosphatase', 'alkphos'] },
+    tbili:   { low: 0.1,  high: 1.2,                                 aliases: ['tbili', 'total bilirubin', 'bilirubin'] },
+    lipase:  { low: 10,   high: 140,                                 aliases: ['lipase'] },
+    amylase: { low: 30,   high: 110,                                 aliases: ['amylase'] },
+    trop:    { low: 0,    high: 0.04, critHigh: 0.4,                 aliases: ['troponin', 'troponin i', 'troponin t', 'trop', 'hs-trop', 'troponin-i'] },
+    bnp:     { low: 0,    high: 100,                                 aliases: ['bnp', 'pro-bnp', 'nt-probnp', 'ntprobnp'] },
+    lactate: { low: 0.5,  high: 2.0,  critHigh: 4.0,                 aliases: ['lactate', 'lactic acid', 'lactic'] },
+    ddim:    { low: 0,    high: 500,                                 aliases: ['d-dimer', 'ddimer', 'd dimer'] },
+    inr:     { low: 0.8,  high: 1.2,  critHigh: 5,                   aliases: ['inr'] },
+    pt:      { low: 11,   high: 13.5,                                aliases: ['pt'] },
+    ptt:     { low: 25,   high: 35,                                  aliases: ['ptt', 'aptt'] },
+    fibr:    { low: 200,  high: 400,                                 aliases: ['fibrinogen'] },
+    ph:      { low: 7.35, high: 7.45, critLow: 7.1,  critHigh: 7.6,  aliases: ['ph', 'arterial ph'] },
+    pco2:    { low: 35,   high: 45,                                  aliases: ['pco2', 'paco2'] },
+    po2:     { low: 80,   high: 100,                                 aliases: ['po2', 'pao2'] },
+    sao2:    { low: 95,   high: 100,                                 aliases: ['sao2', 'svo2', 'spo2', 'o2 sat'] },
+    base_excess: { low: -2, high: 2,                                 aliases: ['base excess', 'be', 'b/e'] },
+    procal:  { low: 0,    high: 0.5,  critHigh: 2,                   aliases: ['procalcitonin', 'pct'] },
+    crp:     { low: 0,    high: 10,                                  aliases: ['crp', 'c-reactive protein'] },
+    ferritin:{ low: 12,   high: 300,                                 aliases: ['ferritin'] },
+    a1c:     { low: 4.0,  high: 5.6,                                 aliases: ['a1c', 'hba1c', 'hemoglobin a1c'] },
+  };
+  function lookupLabRef(name){
+    if (!name) return null;
+    const n = name.toLowerCase().replace(/[():,].*$/, '').trim();
+    if (LAB_REF[n]) return LAB_REF[n];
+    for (const [, ref] of Object.entries(LAB_REF)) {
+      if (ref.aliases.some(a => a === n)) return ref;
+    }
+    for (const [key, ref] of Object.entries(LAB_REF)) {
+      if (n.includes(key) || ref.aliases.some(a => n.includes(a))) return ref;
+    }
+    return null;
+  }
+  function autoFlag(name, value){
+    const ref = lookupLabRef(name);
+    if (!ref) return null;
+    const v = parseFloat(value);
+    if (isNaN(v)) return null;
+    if (ref.critHigh != null && v >= ref.critHigh) return 'critical';
+    if (ref.critLow  != null && v <= ref.critLow)  return 'critical';
+    if (v > ref.high) return 'H';
+    if (v < ref.low)  return 'L';
+    return 'normal';
+  }
+
   function addLabRow(data){
     data = data || {};
     const div = document.createElement('div');
@@ -3121,7 +3210,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
       <input type="text" class="lab-name" placeholder="Test name" value="${attrEsc(data.name)}">
       <input type="text" class="lab-value" placeholder="Value" value="${attrEsc(data.value)}">
       <input type="text" class="lab-unit" placeholder="Unit" value="${attrEsc(data.unit)}">
-      <select class="lab-flag" onchange="this.parentElement.setAttribute('data-flag', this.value)">
+      <select class="lab-flag">
         <option value="">—</option>
         <option value="H">H</option>
         <option value="L">L</option>
@@ -3130,9 +3219,40 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
       </select>
       <button class="remove-btn" type="button" title="Remove">×</button>
     `;
-    if (data.flag) div.querySelector('.lab-flag').value = data.flag;
+    const nameInput = div.querySelector('.lab-name');
+    const valueInput = div.querySelector('.lab-value');
+    const flagSelect = div.querySelector('.lab-flag');
+    if (data.flag) {
+      flagSelect.value = data.flag;
+      // If the AI / source set the flag, treat it as "manual" so we don't overwrite
+      flagSelect.dataset.manual = '1';
+    }
+    const applyAuto = () => {
+      if (flagSelect.dataset.manual === '1') return;
+      const f = autoFlag(nameInput.value, valueInput.value);
+      if (f) {
+        flagSelect.value = f;
+        div.setAttribute('data-flag', f);
+      } else {
+        flagSelect.value = '';
+        div.removeAttribute('data-flag');
+      }
+    };
+    nameInput.addEventListener('input', applyAuto);
+    valueInput.addEventListener('input', applyAuto);
+    flagSelect.addEventListener('change', () => {
+      if (flagSelect.value === '') {
+        flagSelect.dataset.manual = '';
+        applyAuto();
+      } else {
+        flagSelect.dataset.manual = '1';
+        div.setAttribute('data-flag', flagSelect.value);
+      }
+    });
     div.querySelector('.remove-btn').addEventListener('click', () => div.remove());
     $('labRows').appendChild(div);
+    // Run once on initial render in case data has name+value but no flag yet
+    if (!data.flag) applyAuto();
   }
   function clearAllLabRows(){
     if (!confirm('Clear all structured lab rows?')) return;
@@ -4079,8 +4199,9 @@ ${transcript}`;
       if (d.labs) html += `<p>${escapeHtml(d.labs)}</p>`;
       if (Array.isArray(d.labsStructured) && d.labsStructured.length) {
         html += '<table><thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Flag</th></tr></thead><tbody>';
+        const flagLabel = f => f === 'H' ? 'HIGH' : f === 'L' ? 'LOW' : f === 'critical' ? 'CRITICAL' : f === 'normal' ? 'normal' : '';
         d.labsStructured.forEach(r => {
-          html += `<tr><td>${escapeHtml(r.name || '')}</td><td>${escapeHtml(r.value || '')}</td><td>${escapeHtml(r.unit || '')}</td><td>${escapeHtml(r.flag || '')}</td></tr>`;
+          html += `<tr class="lab-print-${r.flag || 'none'}"><td>${escapeHtml(r.name || '')}</td><td>${escapeHtml(r.value || '')}</td><td>${escapeHtml(r.unit || '')}</td><td>${escapeHtml(flagLabel(r.flag))}</td></tr>`;
         });
         html += '</tbody></table>';
       }
