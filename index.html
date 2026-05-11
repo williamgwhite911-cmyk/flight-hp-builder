@@ -323,6 +323,50 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Lab rows (Diagnostics PTA — Labs) */
+  .lab-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 0.8fr 0.6fr 32px;
+    gap: 4px;
+    margin-bottom: 4px;
+    align-items: center;
+  }
+  .lab-row input, .lab-row select {
+    padding: 6px 8px;
+    font-size: 13px;
+    border-radius: 6px;
+  }
+  .lab-row .remove-btn {
+    height: 32px;
+    font-size: 16px;
+  }
+  .lab-row select.lab-flag {
+    text-align: center;
+    background: white;
+  }
+  .lab-row[data-flag="H"] select { background: #fef3c7; color: #92400e; font-weight: 700; }
+  .lab-row[data-flag="L"] select { background: #dbeafe; color: #1e40af; font-weight: 700; }
+  .lab-row[data-flag="critical"] select { background: #fee2e2; color: #991b1b; font-weight: 700; }
+  .lab-row[data-flag="normal"] select { background: #dcfce7; color: #166534; }
+  @media (max-width: 600px) {
+    .lab-row { grid-template-columns: 1.2fr 1fr 0.8fr 0.6fr 28px; font-size: 12px; }
+  }
+
+  /* ABG/VBG quick-interpretation box */
+  .bg-interp {
+    background: #f0f9ff;
+    border: 1px solid #7dd3fc;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #075985;
+    display: none;
+  }
+  .bg-interp.show { display: block; }
+  .bg-interp strong { color: #0c4a6e; }
+
   /* Crew Times — input + Now button */
   .time-now-row {
     display: grid;
@@ -858,12 +902,82 @@
 
     <fieldset>
       <details>
-        <summary>Diagnostics PTA</summary>
+        <summary>Diagnostics PTA — Imaging</summary>
         <div class="fieldset-body">
-          <label>Imaging (CXR, CT, US, etc.)</label>
+          <label>Imaging Findings (CXR, CT, US, etc.)</label>
           <textarea id="imaging" placeholder="CXR: bilateral diffuse opacities, R pleural effusion. CTPA: no PE, MPA 37mm, mild ground-glass, anasarca. CT abd: pneumoperitoneum, no localized site of perforation."></textarea>
-          <label>Labs (notable values)</label>
+          <button type="button" class="clear-btn" onclick="$('imaging').value=''" style="width:100%;margin-top:4px">Clear imaging text</button>
+
+          <div class="ocr-block" id="ocrBlockRad" style="display:none;margin-top:10px">
+            <label class="ocr-label" for="ocrRadFile">📷 Radiology image(s) (pilot) — cover patient identifiers first; multi-select allowed</label>
+            <input type="file" id="ocrRadFile" accept="image/*" capture="environment" multiple onchange="handleRadPhotos(event)">
+            <div id="ocrRadStatus" class="hint"></div>
+          </div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
+        <summary>Diagnostics PTA — Labs</summary>
+        <div class="fieldset-body">
+          <label>Notable Labs (free text)</label>
           <textarea id="labs" placeholder="D-dimer 3,561 (H, ref 0-500); lactic acid 0.7; UA: many bacteria, 1+ protein, 11-20 RBCs"></textarea>
+
+          <label style="margin-top:10px">Structured Lab Results</label>
+          <div id="labRows"></div>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <button type="button" class="add-btn" style="flex:1;margin:0;min-width:140px" onclick="addLabRow()">+ Add lab row</button>
+            <button type="button" class="add-btn" style="flex:1;margin:0;min-width:140px;background:#fee2e2;color:#991b1b;border-color:#fecaca" onclick="clearAllLabRows()">Clear all rows</button>
+          </div>
+
+          <div class="ocr-block" id="ocrBlockLabs" style="display:none;margin-top:10px">
+            <label class="ocr-label" for="ocrLabsFile">📷 Lab result photo(s) (pilot) — cover patient identifiers first; multi-select allowed</label>
+            <input type="file" id="ocrLabsFile" accept="image/*" capture="environment" multiple onchange="handleLabPhotos(event)">
+            <div id="ocrLabsStatus" class="hint"></div>
+          </div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
+        <summary>ABG / VBG &amp; Basic Chem</summary>
+        <div class="fieldset-body">
+          <label>Gas Type</label>
+          <div class="toggle-group">
+            <label><input type="radio" name="bgType" value="abg" checked><span>ABG</span></label>
+            <label><input type="radio" name="bgType" value="vbg"><span>VBG</span></label>
+            <label><input type="radio" name="bgType" value="none"><span>N/A</span></label>
+          </div>
+          <div class="row-3">
+            <div><label>pH</label><input type="text" id="bgPh" placeholder="7.40" oninput="interpretGas()"></div>
+            <div><label id="bgPco2Lbl">PaCO2 (mmHg)</label><input type="text" id="bgPco2" placeholder="40" oninput="interpretGas()"></div>
+            <div><label id="bgPo2Lbl">PaO2 (mmHg)</label><input type="text" id="bgPo2" placeholder="95" oninput="interpretGas()"></div>
+          </div>
+          <div class="row-3">
+            <div><label>HCO3 (mEq/L)</label><input type="text" id="bgHco3" placeholder="24" oninput="interpretGas()"></div>
+            <div><label>Base excess</label><input type="text" id="bgBe" placeholder="0"></div>
+            <div><label>Lactate (mmol/L)</label><input type="text" id="bgLact" placeholder="1.0" oninput="interpretGas()"></div>
+          </div>
+          <div class="row-3">
+            <div><label>FiO2 (%)</label><input type="text" id="bgFio2" placeholder="21"></div>
+            <div><label id="bgSatLbl">SaO2 (%)</label><input type="text" id="bgSao2" placeholder="98"></div>
+            <div><label>Time of draw</label><input type="time" id="bgTime"></div>
+          </div>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0 8px">
+          <label>Basic Chem (for anion gap &amp; AI interpretation)</label>
+          <div class="row-3">
+            <div><label>Na (mEq/L)</label><input type="text" id="chemNa" placeholder="140" oninput="interpretGas()"></div>
+            <div><label>K (mEq/L)</label><input type="text" id="chemK" placeholder="4.0"></div>
+            <div><label>Cl (mEq/L)</label><input type="text" id="chemCl" placeholder="100" oninput="interpretGas()"></div>
+          </div>
+          <div class="row-3">
+            <div><label>BUN (mg/dL)</label><input type="text" id="chemBun" placeholder="15"></div>
+            <div><label>Cr (mg/dL)</label><input type="text" id="chemCr" placeholder="1.0"></div>
+            <div><label>Glucose (mg/dL)</label><input type="text" id="chemGlu" placeholder="100"></div>
+          </div>
+          <div id="bgInterp" class="bg-interp"></div>
         </div>
       </details>
     </fieldset>
@@ -1170,6 +1284,13 @@
     <div class="output-card">
       <h3>Medication Summary <button class="copy-narrative" style="font-size:11px;padding:6px 10px" onclick="copyMedSummary(this)" type="button">Copy</button></h3>
       <div id="medSummary" class="med-summary">Will be populated when the H&P is generated.</div>
+    </div>
+
+    <div class="output-card">
+      <h3>Clinical Interpretation <button class="copy-narrative" style="font-size:11px;padding:6px 10px" onclick="copyInterpretation(this)" type="button">Copy</button></h3>
+      <button class="generate-all" style="width:100%;margin-bottom:8px" onclick="interpretClinicalData()" type="button">🩺 Interpret Clinical Data</button>
+      <div class="hint" style="margin-bottom:8px">Uses diagnosis chips, vitals, ABG/VBG, chem, labs, imaging, vent settings. Reference only — not in H&P narrative.</div>
+      <div id="clinicalInterp" class="med-summary"><span class="empty">Click the button above to get an AI clinical interpretation.</span></div>
     </div>
   </div>
 </div>
@@ -2290,6 +2411,9 @@ Return plain text only.`;
       pmh: val('pmh'),
       imaging: val('imaging'),
       labs: val('labs'),
+      labsStructured: gatherLabRows(),
+      bloodGas: gatherBloodGas(),
+      chem: gatherBmpChem(),
       vitals: { bp: val('vsBP'), hr: val('vsHR'), rr: val('vsRR'),
                 spo2: val('vsSpO2'), temp: val('vsTemp'), glu: val('vsGlu'),
                 o2dev: val('vsO2dev') },
@@ -2414,10 +2538,10 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   // ====== Photo OCR (Phase 4 — pilot only) ======
   function refreshPhotoOcrUi(){
     const on = loadSettings().photoOcr;
-    const iv = $('ocrBlockIv');
-    const vent = $('ocrBlockVent');
-    if (iv) iv.style.display = on ? 'block' : 'none';
-    if (vent) vent.style.display = on ? 'block' : 'none';
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad'].forEach(id => {
+      const el = $(id);
+      if (el) el.style.display = on ? 'block' : 'none';
+    });
   }
   function fileToBase64(file){
     return new Promise((resolve, reject) => {
@@ -2558,6 +2682,260 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
   }
   // Show/hide on initial load
   refreshPhotoOcrUi();
+
+  // ====== Multi-image vision call ======
+  async function callClaudeVisionMulti(prompt, files){
+    const settings = loadSettings();
+    if (!settings.anthropic) throw new Error('No API key set. Open Settings.');
+    const images = [];
+    for (const f of files) {
+      const b64 = await fileToBase64(f);
+      const media = f.type && f.type.startsWith('image/') ? f.type : 'image/jpeg';
+      images.push({ type: 'image', source: { type: 'base64', media_type: media, data: b64 } });
+    }
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': settings.anthropic,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: settings.model,
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: [...images, { type: 'text', text: prompt }] }],
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API ${response.status}: ${err.slice(0, 200)}`);
+    }
+    const data = await response.json();
+    if (!data.content || !data.content[0] || !data.content[0].text) {
+      throw new Error('Unexpected API response');
+    }
+    return data.content[0].text.trim();
+  }
+
+  // ====== Lab rows (structured) ======
+  function attrEsc(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+  function addLabRow(data){
+    data = data || {};
+    const div = document.createElement('div');
+    div.className = 'lab-row';
+    if (data.flag) div.setAttribute('data-flag', data.flag);
+    div.innerHTML = `
+      <input type="text" class="lab-name" placeholder="Test name" value="${attrEsc(data.name)}">
+      <input type="text" class="lab-value" placeholder="Value" value="${attrEsc(data.value)}">
+      <input type="text" class="lab-unit" placeholder="Unit" value="${attrEsc(data.unit)}">
+      <select class="lab-flag" onchange="this.parentElement.setAttribute('data-flag', this.value)">
+        <option value="">—</option>
+        <option value="H">H</option>
+        <option value="L">L</option>
+        <option value="critical">Crit</option>
+        <option value="normal">Nl</option>
+      </select>
+      <button class="remove-btn" type="button" title="Remove">×</button>
+    `;
+    if (data.flag) div.querySelector('.lab-flag').value = data.flag;
+    div.querySelector('.remove-btn').addEventListener('click', () => div.remove());
+    $('labRows').appendChild(div);
+  }
+  function clearAllLabRows(){
+    if (!confirm('Clear all structured lab rows?')) return;
+    $('labRows').innerHTML = '';
+  }
+  function gatherLabRows(){
+    return Array.from(document.querySelectorAll('#labRows .lab-row')).map(div => ({
+      name: div.querySelector('.lab-name').value.trim(),
+      value: div.querySelector('.lab-value').value.trim(),
+      unit: div.querySelector('.lab-unit').value.trim(),
+      flag: div.querySelector('.lab-flag').value,
+    })).filter(r => r.name || r.value);
+  }
+
+  // ====== ABG/VBG quick interpretation ======
+  function interpretGas(){
+    const ph = parseFloat(val('bgPh'));
+    const pco2 = parseFloat(val('bgPco2'));
+    const hco3 = parseFloat(val('bgHco3'));
+    const na = parseFloat(val('chemNa'));
+    const cl = parseFloat(val('chemCl'));
+    const lact = parseFloat(val('bgLact'));
+    const notes = [];
+    if (!isNaN(ph)) {
+      if (ph < 7.20) notes.push(`Severe acidemia (pH ${ph.toFixed(2)})`);
+      else if (ph < 7.35) notes.push(`Acidemia (pH ${ph.toFixed(2)})`);
+      else if (ph > 7.55) notes.push(`Severe alkalemia (pH ${ph.toFixed(2)})`);
+      else if (ph > 7.45) notes.push(`Alkalemia (pH ${ph.toFixed(2)})`);
+    }
+    if (!isNaN(ph) && !isNaN(pco2) && !isNaN(hco3)) {
+      if (ph < 7.35 && pco2 > 45) notes.push('Respiratory acidosis');
+      if (ph < 7.35 && hco3 < 22) notes.push('Metabolic acidosis');
+      if (ph > 7.45 && pco2 < 35) notes.push('Respiratory alkalosis');
+      if (ph > 7.45 && hco3 > 26) notes.push('Metabolic alkalosis');
+    }
+    if (!isNaN(na) && !isNaN(cl) && !isNaN(hco3)) {
+      const ag = na - (cl + hco3);
+      let tag = ag > 12 ? ' (elevated — consider MUDPILES)' : ag < 8 ? ' (low)' : ' (normal)';
+      notes.push(`Anion gap = ${ag.toFixed(0)}${tag}`);
+    }
+    if (!isNaN(lact)) {
+      if (lact >= 4) notes.push(`Severe lactic elevation (${lact})`);
+      else if (lact >= 2) notes.push(`Mild-moderate lactic elevation (${lact})`);
+    }
+    const interp = $('bgInterp');
+    if (notes.length) {
+      interp.innerHTML = '<strong>Quick read:</strong> ' + notes.join(' · ');
+      interp.classList.add('show');
+    } else {
+      interp.classList.remove('show');
+    }
+  }
+  // Toggle labels when ABG/VBG selector changes
+  document.querySelectorAll('input[name=bgType]').forEach(r => {
+    r.addEventListener('change', () => {
+      const t = document.querySelector('input[name=bgType]:checked').value;
+      $('bgPco2Lbl').textContent = t === 'vbg' ? 'PvCO2 (mmHg)' : 'PaCO2 (mmHg)';
+      $('bgPo2Lbl').textContent = t === 'vbg' ? 'PvO2 (mmHg)' : 'PaO2 (mmHg)';
+      $('bgSatLbl').textContent = t === 'vbg' ? 'SvO2 (%)' : 'SaO2 (%)';
+    });
+  });
+
+  function gatherBloodGas(){
+    const t = document.querySelector('input[name=bgType]:checked');
+    return {
+      type: t ? t.value : 'abg',
+      ph: val('bgPh'),
+      pco2: val('bgPco2'),
+      po2: val('bgPo2'),
+      hco3: val('bgHco3'),
+      be: val('bgBe'),
+      lactate: val('bgLact'),
+      fio2: val('bgFio2'),
+      sat: val('bgSao2'),
+      time: val('bgTime'),
+    };
+  }
+  function gatherBmpChem(){
+    return {
+      na: val('chemNa'), k: val('chemK'), cl: val('chemCl'),
+      bun: val('chemBun'), cr: val('chemCr'), glucose: val('chemGlu'),
+    };
+  }
+
+  // ====== Lab photo extraction (pilot) ======
+  async function handleLabPhotos(event){
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    if (!confirmPhi('lab result')) { event.target.value = ''; return; }
+    const status = $('ocrLabsStatus');
+    const n = files.length;
+    status.innerHTML = `<span class="spinner"></span> Extracting lab values from ${n} photo${n === 1 ? '' : 's'}…`;
+    status.style.color = '#5b21b6';
+    const prompt = `Examine the lab result photo(s) and extract every numeric result visible. Return ONLY a JSON object:
+{ "results": [ { "name": "", "value": "", "unit": "", "flag": "H|L|critical|normal|", "ref": "", "time": "HH:MM" } ] }
+- "name": test name (e.g., "Hemoglobin", "Sodium", "Lactate", "WBC")
+- "value": numeric value as shown
+- "unit": units as shown (e.g., "mg/dL", "mmol/L", "K/uL")
+- "flag": "H" if marked high, "L" if low, "critical" if marked critical, "normal" if explicitly within range, otherwise ""
+- "ref": reference range if shown
+- "time": time of draw if shown
+Omit fields you cannot read. Do not invent values. Return ONLY the JSON object, no markdown.`;
+    try {
+      let text = await callClaudeVisionMulti(prompt, files);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const data = JSON.parse(text);
+      const results = Array.isArray(data.results) ? data.results : [];
+      if (!results.length) {
+        status.textContent = 'No labs detected. Try a clearer photo.';
+        status.style.color = '#991b1b';
+        return;
+      }
+      results.forEach(r => addLabRow(r));
+      status.innerHTML = `✓ Added ${results.length} lab${results.length === 1 ? '' : 's'} to the structured table. Review for accuracy.`;
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  // ====== Radiology photo summary (pilot) ======
+  async function handleRadPhotos(event){
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    if (!confirmPhi('radiology image')) { event.target.value = ''; return; }
+    const status = $('ocrRadStatus');
+    const n = files.length;
+    status.innerHTML = `<span class="spinner"></span> Generating radiology summary from ${n} image${n === 1 ? '' : 's'}…`;
+    status.style.color = '#5b21b6';
+    const prompt = `You are reviewing radiology image(s) for a flight crew handoff document. Provide a concise summary of findings in 1-3 sentences per image. Use clinical/radiology language. Mention modality and view if discernible. Do not include disclaimers or recommendations to obtain formal reads. This is a clinician reference summary, not a final radiology report. Return plain text only.`;
+    try {
+      const text = await callClaudeVisionMulti(prompt, files);
+      const imaging = $('imaging');
+      const summary = `[AI image summary] ${text}`;
+      imaging.value = imaging.value.trim() ? imaging.value.trim() + '\n' + summary : summary;
+      status.innerHTML = '✓ Summary appended to imaging field. Review for accuracy.';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  // ====== Clinical Interpretation ======
+  async function interpretClinicalData(){
+    const settings = loadSettings();
+    if (!settings.anthropic) {
+      setStatus('Anthropic API key required for interpretation.', true);
+      openSettings();
+      return;
+    }
+    const data = gatherAllData();
+    const card = $('clinicalInterp');
+    card.innerHTML = '<div class="tx-summary"><span class="spinner"></span> Generating clinical interpretation…</div>';
+    const prompt = `You are assisting a critical-care flight nurse. Based on the patient data below, provide a structured clinical interpretation.
+
+Format (plain text, no markdown headers):
+PRIMARY PROBLEMS
+- short bullet list of the most important clinical problems based on the data
+
+DIFFERENTIAL CONSIDERATIONS
+- short bullet list of differentials worth considering or ruling out
+
+MONITORING FOCUS DURING TRANSPORT
+- short bullet list of what to watch closely
+
+URGENT ACTION ITEMS
+- short bullet list of immediate priorities
+
+Use accepted critical-care abbreviations. No disclaimers. No restating the data verbatim. This is a clinician reference, not individualized medical advice or orders.
+
+Patient data:
+${JSON.stringify(data, null, 2)}`;
+    try {
+      const text = await callAnthropic(prompt);
+      card.innerHTML = `<div class="tx-summary">${escapeHtml(text)}<div class="tx-disclaimer">AI-generated; verify against protocol and physician orders. Not patient-specific medical advice.</div></div>`;
+    } catch (err) {
+      card.innerHTML = `<div class="tx-summary" style="border-color:#fca5a5;background:#fef2f2;color:#991b1b">Failed: ${escapeHtml(err.message || String(err))}</div>`;
+    }
+  }
+  function copyInterpretation(btn){
+    const txt = $('clinicalInterp').textContent.trim();
+    if (!txt) return;
+    navigator.clipboard.writeText(txt).then(() => {
+      const old = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = old; btn.classList.remove('copied'); }, 1500);
+    });
+  }
 
   // ====== Anthropic API call ======
   async function callAnthropic(prompt){
@@ -2752,6 +3130,10 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     if ($('airReasonPicker')) $('airReasonPicker').selectedIndex = 0;
     if ($('txSummary')) $('txSummary').innerHTML = '';
     if ($('medSummary')) $('medSummary').innerHTML = '';
+    if ($('clinicalInterp')) $('clinicalInterp').innerHTML = '<span class="empty">Click the button above to get an AI clinical interpretation.</span>';
+    if ($('labRows')) $('labRows').innerHTML = '';
+    if ($('bgInterp')) $('bgInterp').classList.remove('show');
+    document.querySelector('input[name=bgType][value=abg]').checked = true;
   }
 
   // ====== Hospital address auto-fill ======
@@ -2922,6 +3304,9 @@ Schema:
   "pmh": "",
   "imaging": "",
   "labs": "",
+  "labsStructured": [ { "name": "", "value": "", "unit": "", "flag": "H|L|critical|normal|" } ],
+  "bloodGas": { "type": "abg|vbg|none", "ph": "", "pco2": "", "po2": "", "hco3": "", "be": "", "lactate": "", "fio2": "", "sat": "", "time": "" },
+  "chem": { "na": "", "k": "", "cl": "", "bun": "", "cr": "", "glucose": "" },
   "vitals": { "bp": "", "hr": "", "rr": "", "spo2": "", "temp": "", "glu": "", "o2dev": "" },
   "assess": {
     "gcs": "", "pain": "", "rass": "",
@@ -3013,6 +3398,27 @@ ${transcript}`;
     setIf('onset', d.onset);
     setIf('pmh', d.pmh);
     setIf('imaging', d.imaging);
+    if (Array.isArray(d.labsStructured)) {
+      d.labsStructured.forEach(r => { if (r && (r.name || r.value)) addLabRow(r); });
+    }
+    if (d.bloodGas) {
+      if (d.bloodGas.type === 'vbg') document.querySelector('input[name=bgType][value=vbg]').checked = true;
+      else if (d.bloodGas.type === 'none') document.querySelector('input[name=bgType][value=none]').checked = true;
+      setIf('bgPh', d.bloodGas.ph);
+      setIf('bgPco2', d.bloodGas.pco2);
+      setIf('bgPo2', d.bloodGas.po2);
+      setIf('bgHco3', d.bloodGas.hco3);
+      setIf('bgBe', d.bloodGas.be);
+      setIf('bgLact', d.bloodGas.lactate);
+      setIf('bgFio2', d.bloodGas.fio2);
+      setIf('bgSao2', d.bloodGas.sat);
+      setIf('bgTime', d.bloodGas.time);
+    }
+    if (d.chem) {
+      setIf('chemNa', d.chem.na); setIf('chemK', d.chem.k); setIf('chemCl', d.chem.cl);
+      setIf('chemBun', d.chem.bun); setIf('chemCr', d.chem.cr); setIf('chemGlu', d.chem.glucose);
+    }
+    interpretGas();
     setIf('labs', d.labs);
     if (d.vitals) {
       setIf('vsBP', d.vitals.bp); setIf('vsHR', d.vitals.hr); setIf('vsRR', d.vitals.rr);
