@@ -360,6 +360,26 @@
       color: #444;
       font-style: italic;
     }
+    #printArea .patient-block {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+      margin: 4px 0;
+    }
+    #printArea .patient-photo img {
+      max-width: 2.4in;
+      max-height: 1.6in;
+      object-fit: contain;
+      border: 1px solid #444;
+      display: block;
+    }
+    #printArea .patient-photo .photo-caption {
+      font-size: 8pt;
+      color: #444;
+      text-align: center;
+      margin-top: 2px;
+    }
     @page { size: letter; margin: 0.5in; }
   }
 
@@ -691,16 +711,22 @@
       <details open>
         <summary>Flight & Crew</summary>
         <div class="fieldset-body">
-          <label>StatFlight Number</label>
-          <select id="statFlightNum">
-            <option value="">— Select —</option>
-            <option value="StatFlight 1">StatFlight 1</option>
-            <option value="StatFlight 2">StatFlight 2</option>
-            <option value="StatFlight 3">StatFlight 3</option>
-            <option value="StatFlight 4">StatFlight 4</option>
-            <option value="StatFlight 5">StatFlight 5</option>
-            <option value="StatFlight 6">StatFlight 6</option>
-          </select>
+          <div class="row">
+            <div><label>StatFlight Number</label>
+              <select id="statFlightNum">
+                <option value="">— Select —</option>
+                <option value="StatFlight 1">StatFlight 1</option>
+                <option value="StatFlight 2">StatFlight 2</option>
+                <option value="StatFlight 3">StatFlight 3</option>
+                <option value="StatFlight 4">StatFlight 4</option>
+                <option value="StatFlight 5">StatFlight 5</option>
+                <option value="StatFlight 6">StatFlight 6</option>
+              </select>
+            </div>
+            <div><label>Aircraft Name / Tail #</label>
+              <input type="text" id="aircraft" placeholder="N123SF or Bell 407">
+            </div>
+          </div>
           <label>Flight Crew</label>
           <input type="text" id="flightCrew" placeholder="e.g., RN: Will White; Medic: Chris Smith">
         </div>
@@ -711,8 +737,17 @@
       <details open>
         <summary>Patient Demographics</summary>
         <div class="fieldset-body">
+          <label>Patient Name</label>
+          <input type="text" id="ptName" placeholder="Last, First Middle">
           <div class="row">
-            <div><label>Age</label><input type="number" id="ptAge" placeholder="64"></div>
+            <div><label>Date of Birth</label>
+              <input type="date" id="ptDob" oninput="onDobChange()">
+            </div>
+            <div><label>Age</label>
+              <input type="number" id="ptAge" placeholder="64">
+            </div>
+          </div>
+          <div class="row">
             <div><label>Sex</label>
               <select id="ptSex">
                 <option value="">—</option>
@@ -721,9 +756,30 @@
                 <option>Other</option>
               </select>
             </div>
+            <div><label>MRN</label>
+              <input type="text" id="ptMRN" placeholder="E1234567">
+            </div>
           </div>
-          <label>MRN</label>
-          <input type="text" id="ptMRN" placeholder="E1234567">
+          <label>Home Address</label>
+          <input type="text" id="ptAddress" placeholder="1234 Main St, City, ST 12345">
+          <div class="row">
+            <div>
+              <label>Height <span class="hint" id="ptHeightConv" style="margin-left:6px"></span></label>
+              <input type="text" id="ptHeight" placeholder="5'10&quot; or 70 in or 178 cm" oninput="updateHeightConv()">
+            </div>
+            <div>
+              <label>Weight <span class="hint" id="ptWeightConv" style="margin-left:6px"></span></label>
+              <input type="text" id="ptWeight" placeholder="180 lb or 82 kg" oninput="updateWeightConv()">
+            </div>
+          </div>
+
+          <label style="margin-top:10px">Driver's License Photo (stored on device; embeds in printed report)</label>
+          <input type="file" id="ptLicenseFile" accept="image/*" capture="environment" onchange="handleLicensePhoto(event)">
+          <div id="licensePreview"></div>
+          <div id="licenseOcrBlock" style="display:none;margin-top:6px">
+            <button type="button" class="calc-btn" onclick="extractLicenseData()">🤖 Auto-fill from license (pilot — sends photo to AI)</button>
+          </div>
+          <div class="hint">Photo stays on device unless you click the AI extract button (pilot only).</div>
         </div>
       </details>
     </fieldset>
@@ -1775,6 +1831,138 @@
     if ($(id)) $(id).value = `${hh}:${mm}`;
   }
 
+  // ====== Height / Weight unit conversion ======
+  function parseHeightToInches(str){
+    if (!str) return null;
+    const s = String(str).trim();
+    // 5'10" or 5'10 or 5' 10"
+    let m = s.match(/^(\d+)\s*[''′]\s*(\d+)/);
+    if (m) return parseInt(m[1], 10) * 12 + parseInt(m[2], 10);
+    // 5 ft 10 in
+    m = s.match(/^(\d+)\s*ft\s*(\d+)\s*(?:in|inches)?/i);
+    if (m) return parseInt(m[1], 10) * 12 + parseInt(m[2], 10);
+    // 178 cm or 1.78 m
+    m = s.match(/^(\d+(?:\.\d+)?)\s*cm$/i);
+    if (m) return parseFloat(m[1]) / 2.54;
+    m = s.match(/^(\d+(?:\.\d+)?)\s*m$/i);
+    if (m) return parseFloat(m[1]) * 100 / 2.54;
+    // bare number: assume inches if 24-96, else cm
+    m = s.match(/^(\d+(?:\.\d+)?)\s*(?:in|inches)?$/i);
+    if (m) {
+      const n = parseFloat(m[1]);
+      if (n >= 24 && n <= 96) return n;
+      if (n >= 100 && n <= 230) return n / 2.54; // assume cm
+    }
+    return null;
+  }
+  function updateHeightConv(){
+    const inches = parseHeightToInches(val('ptHeight'));
+    const conv = $('ptHeightConv');
+    if (!conv) return;
+    if (inches == null) { conv.textContent = ''; return; }
+    const cm = Math.round(inches * 2.54);
+    const ft = Math.floor(inches / 12);
+    const inRem = Math.round(inches - ft * 12);
+    conv.textContent = `= ${ft}'${inRem}" / ${cm} cm`;
+  }
+  function parseWeightToLb(str){
+    if (!str) return null;
+    const s = String(str).trim();
+    let m = s.match(/^(\d+(?:\.\d+)?)\s*kg$/i);
+    if (m) return parseFloat(m[1]) * 2.20462;
+    m = s.match(/^(\d+(?:\.\d+)?)\s*(?:lb|lbs|pounds)?$/i);
+    if (m) {
+      const n = parseFloat(m[1]);
+      // bare number: assume lb if 50-500, else kg if 20-300
+      if (n >= 50 && n <= 500) return n;
+      if (n >= 20 && n <= 250) return n * 2.20462;
+    }
+    return null;
+  }
+  function updateWeightConv(){
+    const lb = parseWeightToLb(val('ptWeight'));
+    const conv = $('ptWeightConv');
+    if (!conv) return;
+    if (lb == null) { conv.textContent = ''; return; }
+    const kg = Math.round(lb / 2.20462 * 10) / 10;
+    conv.textContent = `= ${Math.round(lb)} lb / ${kg} kg`;
+  }
+  // Auto-fill age from DOB when DOB changes (only if age is empty)
+  function onDobChange(){
+    const dob = val('ptDob');
+    if (!dob) return;
+    if (val('ptAge')) return;
+    const dobDate = new Date(dob);
+    if (isNaN(dobDate.getTime())) return;
+    const now = new Date();
+    let age = now.getFullYear() - dobDate.getFullYear();
+    const m = now.getMonth() - dobDate.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < dobDate.getDate())) age--;
+    if (age >= 0 && age < 130) $('ptAge').value = age;
+  }
+
+  // ====== Driver's license photo (stored locally; embeds in print) ======
+  let licensePhotoDataUrl = null;
+  function handleLicensePhoto(event){
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      licensePhotoDataUrl = e.target.result;
+      renderLicensePreview();
+    };
+    reader.onerror = () => alert('Failed to read photo');
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  }
+  function clearLicensePhoto(){
+    licensePhotoDataUrl = null;
+    renderLicensePreview();
+  }
+  function renderLicensePreview(){
+    const wrap = $('licensePreview');
+    if (!wrap) return;
+    if (!licensePhotoDataUrl) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-top:6px">
+        <img src="${licensePhotoDataUrl}" alt="License preview" style="max-width:180px;max-height:120px;border:1px solid #cbd5e1;border-radius:6px;object-fit:contain;background:#f8fafc">
+        <button type="button" class="clear-btn" onclick="clearLicensePhoto()">Remove</button>
+      </div>
+    `;
+  }
+  async function extractLicenseData(){
+    if (!licensePhotoDataUrl) { alert('Upload a license photo first.'); return; }
+    if (!confirmPhi("driver's license")) return;
+    // Convert data URL to File for vision call
+    const resp = await fetch(licensePhotoDataUrl);
+    const blob = await resp.blob();
+    const file = new File([blob], 'license.jpg', { type: blob.type || 'image/jpeg' });
+    const prompt = `Examine this US driver's license photo and extract the personal information visible. Return ONLY a JSON object:
+{ "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "Full street address", "height": "5'10\\"" or "70 in", "weight": "180 lb", "sex": "M|F" }
+Omit any field you cannot read. Do not invent values. Return ONLY the JSON object, no markdown.`;
+    try {
+      let text = await callClaudeVisionMulti(prompt, [file]);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const data = JSON.parse(text);
+      const setIfEmpty = (id, v) => { if (v && $(id) && !$(id).value) $(id).value = v; };
+      setIfEmpty('ptName', data.name);
+      setIfEmpty('ptDob', data.dob);
+      setIfEmpty('ptAddress', data.address);
+      if (data.height && !val('ptHeight')) { $('ptHeight').value = data.height; updateHeightConv(); }
+      if (data.weight && !val('ptWeight')) { $('ptWeight').value = data.weight; updateWeightConv(); }
+      if (data.sex && !val('ptSex')) {
+        $('ptSex').value = data.sex === 'M' ? 'Male' : (data.sex === 'F' ? 'Female' : '');
+      }
+      onDobChange();
+      alert('Extracted ' + Object.keys(data).filter(k => data[k]).length + ' field(s) from license.');
+    } catch (err) {
+      alert('Extraction failed: ' + (err.message || err));
+    }
+  }
+
   // Combine "Name" + credentials select into "Name, CRED" (or "" if no name)
   function nameCred(baseId){
     const n = val(baseId + 'Name');
@@ -2451,9 +2639,19 @@ Return plain text only.`;
     return {
       mode,
       statFlight: val('statFlightNum'),
+      aircraft: val('aircraft'),
       crew: val('flightCrew'),
       times: { roomEntry: val('tRoom'), monitorApplied: val('tMonitor') },
-      patient: { age: val('ptAge'), sex: val('ptSex'), mrn: val('ptMRN') },
+      patient: {
+        name: val('ptName'),
+        dob: val('ptDob'),
+        age: val('ptAge'),
+        sex: val('ptSex'),
+        mrn: val('ptMRN'),
+        address: val('ptAddress'),
+        height: val('ptHeight'),
+        weight: val('ptWeight'),
+      },
       sending: mode === 'ift'
         ? { hospital: val('sendHospName'), address: val('sendHospAddr'),
             nurse: nameCred('sendNurse'), md: nameCred('sendMD') }
@@ -2602,7 +2800,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   // ====== Photo OCR (Phase 4 — pilot only) ======
   function refreshPhotoOcrUi(){
     const on = loadSettings().photoOcr;
-    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad'].forEach(id => {
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'licenseOcrBlock'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = on ? 'block' : 'none';
     });
@@ -3198,6 +3396,10 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('labRows')) $('labRows').innerHTML = '';
     if ($('bgInterp')) $('bgInterp').classList.remove('show');
     document.querySelector('input[name=bgType][value=abg]').checked = true;
+    licensePhotoDataUrl = null;
+    renderLicensePreview();
+    if ($('ptHeightConv')) $('ptHeightConv').textContent = '';
+    if ($('ptWeightConv')) $('ptWeightConv').textContent = '';
   }
 
   // ====== Hospital address auto-fill ======
@@ -3347,7 +3549,8 @@ ${JSON.stringify(data, null, 2)}`;
 
 Schema:
 {
-  "patient": { "age": "", "sex": "Male|Female|Other", "mrn": "" },
+  "patient": { "name": "Last, First", "dob": "YYYY-MM-DD", "age": "", "sex": "Male|Female|Other", "mrn": "", "address": "", "height": "5'10\" or 178 cm", "weight": "180 lb or 82 kg" },
+  "aircraft": "tail # or aircraft name",
   "callType": "ift|scene",
   "times": { "roomEntry": "HH:MM 24h", "monitorApplied": "HH:MM 24h" },
   "sending": {
@@ -3425,10 +3628,17 @@ ${transcript}`;
     }
 
     if (d.patient) {
+      setIf('ptName', d.patient.name);
+      setIf('ptDob', d.patient.dob);
       setIf('ptAge', d.patient.age);
       setIf('ptSex', d.patient.sex);
       setIf('ptMRN', d.patient.mrn);
+      setIf('ptAddress', d.patient.address);
+      if (d.patient.height && !val('ptHeight')) { $('ptHeight').value = d.patient.height; updateHeightConv(); }
+      if (d.patient.weight && !val('ptWeight')) { $('ptWeight').value = d.patient.weight; updateWeightConv(); }
+      onDobChange();
     }
+    setIf('aircraft', d.aircraft);
     if (d.times) {
       setIf('tRoom', d.times.roomEntry);
       setIf('tMonitor', d.times.monitorApplied);
@@ -3556,42 +3766,92 @@ ${transcript}`;
     const template = $('templateOut').textContent.trim();
     const interpText = $('clinicalInterp') ? $('clinicalInterp').textContent.trim() : '';
 
-    // Build meta rows from whatever data we have
-    const meta = [];
-    if (d.statFlight) meta.push(['StatFlight', d.statFlight]);
-    if (d.crew) meta.push(['Flight Crew', d.crew]);
-    if (d.patient && (d.patient.age || d.patient.sex)) meta.push(['Patient', [d.patient.age, d.patient.sex].filter(Boolean).join(' yo ')]);
-    if (d.patient && d.patient.mrn) meta.push(['MRN', d.patient.mrn]);
-    if (d.mode === 'ift') {
-      if (d.sending && d.sending.hospital) meta.push(['Sending Facility', d.sending.hospital]);
-      if (d.sending && d.sending.nurse) meta.push(['Sending RN', d.sending.nurse]);
-      if (d.sending && d.sending.md) meta.push(['Sending MD', d.sending.md]);
-    } else {
-      if (d.sending && d.sending.agency) meta.push(['Sending Agency', d.sending.agency]);
-      if (d.sending && d.sending.county) meta.push(['County', d.sending.county]);
-      if (d.sending && d.sending.ambulance) meta.push(['Unit', d.sending.ambulance]);
-      if (d.sending && d.sending.crew1) meta.push(['Crew 1', d.sending.crew1]);
-      if (d.sending && d.sending.crew2) meta.push(['Crew 2', d.sending.crew2]);
-      if (d.sending && d.sending.location) meta.push(['Scene', d.sending.location]);
-    }
-    if (d.receiving && d.receiving.hospital) meta.push(['Receiving Facility', d.receiving.hospital]);
-    if (d.receiving && d.receiving.md) meta.push(['Accepting MD', d.receiving.md]);
-    if (d.receiving && d.receiving.unit) meta.push(['Admit To', d.receiving.unit]);
-    if (d.times && d.times.roomEntry) meta.push(['Room/Ambulance Entry', d.times.roomEntry]);
-    if (d.times && d.times.monitorApplied) meta.push(['Monitor Applied', d.times.monitorApplied]);
-    if (d.distance) {
-      const dG = d.distance.dGround, tG = d.distance.tGround, dA = d.distance.dAir, tA = d.distance.tAir;
-      if (dG || tG) meta.push(['Ground', `${dG || '—'} mi · ${tG || '—'} min`]);
-      if (dA || tA) meta.push(['Air', `${dA || '—'} mi · ${tA || '—'} min`]);
-    }
-    const diagnosis = combinedDiagnosis();
+    // ----- Compose face sheet -----
+    const p = d.patient || {};
+    // Height with cm; Weight with kg
+    const inches = parseHeightToInches(p.height);
+    const heightDisplay = (() => {
+      if (!p.height) return '';
+      if (inches == null) return p.height;
+      const ft = Math.floor(inches / 12), inRem = Math.round(inches - ft * 12);
+      return `${ft}'${inRem}" (${Math.round(inches * 2.54)} cm)`;
+    })();
+    const lb = parseWeightToLb(p.weight);
+    const weightDisplay = (() => {
+      if (!p.weight) return '';
+      if (lb == null) return p.weight;
+      const kg = Math.round(lb / 2.20462 * 10) / 10;
+      return `${Math.round(lb)} lb (${kg} kg)`;
+    })();
+    const ageSex = [p.age && `${p.age} yo`, p.sex].filter(Boolean).join(' ');
+    const dobAge = [p.dob, ageSex && `(${ageSex})`].filter(Boolean).join(' ');
 
     let html = '<h1>Flight Crew H&P Report</h1>';
+
+    // Flight info block
+    const flightMeta = [];
+    flightMeta.push(['Report generated', `${dateStr} ${timeStr}`]);
+    flightMeta.push(['Call type', d.mode === 'ift' ? 'Interfacility (IFT)' : 'Scene']);
+    if (d.statFlight) flightMeta.push(['Flight number', d.statFlight]);
+    if (d.aircraft) flightMeta.push(['Aircraft', d.aircraft]);
+    if (d.crew) flightMeta.push(['Flight crew', d.crew]);
     html += '<div class="meta">';
-    html += `<div><b>Report generated:</b> ${escapeHtml(dateStr)} ${escapeHtml(timeStr)}</div>`;
-    html += `<div><b>Call type:</b> ${escapeHtml(d.mode === 'ift' ? 'Interfacility (IFT)' : 'Scene')}</div>`;
-    meta.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
+    flightMeta.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
     html += '</div>';
+
+    // Patient face sheet
+    if (p.name || p.dob || p.age || p.mrn || p.address || p.height || p.weight || licensePhotoDataUrl) {
+      html += '<h2>Patient</h2>';
+      html += '<div class="patient-block">';
+      html += '<div class="patient-text">';
+      const pmeta = [];
+      if (p.name) pmeta.push(['Name', p.name]);
+      if (dobAge) pmeta.push(['DOB', dobAge]);
+      else if (ageSex) pmeta.push(['Age', ageSex]);
+      if (p.mrn) pmeta.push(['MRN', p.mrn]);
+      if (p.address) pmeta.push(['Address', p.address]);
+      if (heightDisplay) pmeta.push(['Height', heightDisplay]);
+      if (weightDisplay) pmeta.push(['Weight', weightDisplay]);
+      html += '<div class="meta">';
+      pmeta.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
+      html += '</div></div>';
+      if (licensePhotoDataUrl) {
+        html += `<div class="patient-photo"><img src="${licensePhotoDataUrl}" alt="Driver's license"><div class="photo-caption">Driver's license</div></div>`;
+      }
+      html += '</div>';
+    }
+
+    // Logistics block (sending / receiving / times / distance)
+    const logistics = [];
+    if (d.mode === 'ift') {
+      if (d.sending && d.sending.hospital) logistics.push(['Sending facility', d.sending.hospital]);
+      if (d.sending && d.sending.nurse) logistics.push(['Sending RN', d.sending.nurse]);
+      if (d.sending && d.sending.md) logistics.push(['Sending MD', d.sending.md]);
+    } else {
+      if (d.sending && d.sending.agency) logistics.push(['Sending agency', d.sending.agency]);
+      if (d.sending && d.sending.county) logistics.push(['County', d.sending.county]);
+      if (d.sending && d.sending.ambulance) logistics.push(['Unit', d.sending.ambulance]);
+      if (d.sending && d.sending.crew1) logistics.push(['Crew 1', d.sending.crew1]);
+      if (d.sending && d.sending.crew2) logistics.push(['Crew 2', d.sending.crew2]);
+      if (d.sending && d.sending.location) logistics.push(['Scene', d.sending.location]);
+    }
+    if (d.receiving && d.receiving.hospital) logistics.push(['Receiving facility', d.receiving.hospital]);
+    if (d.receiving && d.receiving.md) logistics.push(['Accepting MD', d.receiving.md]);
+    if (d.receiving && d.receiving.unit) logistics.push(['Admit to', d.receiving.unit]);
+    if (d.times && d.times.roomEntry) logistics.push(['Room/Ambulance entry', d.times.roomEntry]);
+    if (d.times && d.times.monitorApplied) logistics.push(['Monitor applied', d.times.monitorApplied]);
+    if (d.distance) {
+      const dG = d.distance.dGround, tG = d.distance.tGround, dA = d.distance.dAir, tA = d.distance.tAir;
+      if (dG || tG) logistics.push(['Ground', `${dG || '—'} mi · ${tG || '—'} min`]);
+      if (dA || tA) logistics.push(['Air', `${dA || '—'} mi · ${tA || '—'} min`]);
+    }
+    if (logistics.length) {
+      html += '<h2>Transport Logistics</h2><div class="meta">';
+      logistics.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
+      html += '</div>';
+    }
+
+    const diagnosis = combinedDiagnosis();
 
     if (diagnosis) {
       html += '<h2>Diagnosis</h2>';
