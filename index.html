@@ -323,6 +323,26 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* Crew Times — input + Now button */
+  .time-now-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .now-btn {
+    background: #0ea5e9;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .now-btn:hover { background: #0284c7; }
+
   /* Time-sensitive condition checkboxes */
   .ts-grid {
     display: grid;
@@ -722,6 +742,29 @@
           <input type="text" id="recvUnit" placeholder="ED, Trauma Bay 1 / OR / SICU">
           <label>Service / Specialty (if known)</label>
           <input type="text" id="recvSvc" placeholder="General Surgery / Trauma">
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details open>
+        <summary>Crew Times</summary>
+        <div class="fieldset-body">
+          <div class="row">
+            <div><label>Time entered room / ambulance</label>
+              <div class="time-now-row">
+                <input type="time" id="tRoom">
+                <button type="button" class="now-btn" onclick="setTimeNow('tRoom')">Now</button>
+              </div>
+            </div>
+            <div><label>Time cardiac monitor applied</label>
+              <div class="time-now-row">
+                <input type="time" id="tMonitor">
+                <button type="button" class="now-btn" onclick="setTimeNow('tMonitor')">Now</button>
+              </div>
+            </div>
+          </div>
+          <div class="hint">Tap a time field to pick from the system clock or type. "Now" snaps to the current time.</div>
         </div>
       </details>
     </fieldset>
@@ -1540,6 +1583,12 @@
 <script>
   function $(id){ return document.getElementById(id); }
   function val(id){ return ($(id) && $(id).value) ? $(id).value.trim() : ''; }
+  function setTimeNow(id){
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    if ($(id)) $(id).value = `${hh}:${mm}`;
+  }
 
   // Combine "Name" + credentials select into "Name, CRED" (or "" if no name)
   function nameCred(baseId){
@@ -2218,6 +2267,7 @@ Return plain text only.`;
       mode,
       statFlight: val('statFlightNum'),
       crew: val('flightCrew'),
+      times: { roomEntry: val('tRoom'), monitorApplied: val('tMonitor') },
       patient: { age: val('ptAge'), sex: val('ptSex'), mrn: val('ptMRN') },
       sending: mode === 'ift'
         ? { hospital: val('sendHospName'), address: val('sendHospAddr'),
@@ -2346,6 +2396,7 @@ The patient's acuity was classified as [acuity] due to [reason matching the diag
 
 CRITICAL INSTRUCTIONS:
 - Use exact times, names, doses, and numbers from the data; do not invent values.
+- If "times.roomEntry" is provided, include it in the narrative as the time the flight crew entered the room/ambulance. If "times.monitorApplied" is provided, note when the cardiac monitor was applied. Mention these in the patient handoff / transport flow section, not in the H&P narrative.
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
 - Use professional EMS/clinical language.
 - Do not use em dashes.
@@ -2852,6 +2903,7 @@ Schema:
 {
   "patient": { "age": "", "sex": "Male|Female|Other", "mrn": "" },
   "callType": "ift|scene",
+  "times": { "roomEntry": "HH:MM 24h", "monitorApplied": "HH:MM 24h" },
   "sending": {
     "hospital": "", "address": "", "nurse": "Name, CRED", "md": "Name, CRED",
     "agency": "", "county": "", "ambulance": "",
@@ -2927,6 +2979,10 @@ ${transcript}`;
       setIf('ptAge', d.patient.age);
       setIf('ptSex', d.patient.sex);
       setIf('ptMRN', d.patient.mrn);
+    }
+    if (d.times) {
+      setIf('tRoom', d.times.roomEntry);
+      setIf('tMonitor', d.times.monitorApplied);
     }
     if (d.sending) {
       setIf('sendHospName', d.sending.hospital);
