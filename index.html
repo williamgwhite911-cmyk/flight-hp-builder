@@ -799,7 +799,7 @@
         <div class="fieldset-body">
           <div class="hint">Paste a sending facility report, dispatch transcript, voice-memo transcription, or any free-text patient summary. AI will extract demographics, history, vitals, meds, etc., and pre-fill the form fields below. You can review and edit before generating the final H&P.</div>
           <label>Paste Transcript or Report</label>
-          <textarea id="transcript" rows="8" placeholder="e.g., '64 yo F, hx HFpEF, AFib, recent renal stent removal. Presents with 3 days SOB, 22-pound weight gain. CXR shows pulmonary edema. CT abd shows pneumoperitoneum. Given fentanyl 25 mcg, Lasix 40 mg, Cefepime 2g. BP 140/85, HR 88, RR 22, SpO2 81% RA, on 4L NC now. 20 g IV L forearm. Receiving Dr. Drahos at IU Methodist for surgery.'"></textarea>
+          <textarea id="transcript" rows="8" placeholder="e.g., '64 yo F, hx HFpEF, AFib, recent renal stent removal. Presents with 3 days SOB, 22-pound weight gain. CXR shows pulmonary edema. CT abd shows pneumoperitoneum. Given fentanyl 25 mcg, Lasix 40 mg, Cefepime 2g. BP 140/85, HR 88, RR 22, SpO2 81% RA, on 4L NC now. 20 g IV L forearm. Receiving Dr. Drahos at Jackson Memorial for surgery.'"></textarea>
           <label>Or upload a .txt file</label>
           <input type="file" id="transcriptFile" accept=".txt,.text" onchange="loadTranscriptFile(event)">
           <button class="add-btn" type="button" style="background:#ede9fe;color:#5b21b6;border-color:#c4b5fd" onclick="extractFromTranscript()">✨ Extract & Fill Form from Transcript</button>
@@ -1039,7 +1039,7 @@
           </div>
           <label>Receiving Hospital Address (editable)</label>
           <div class="input-clear-row">
-            <input type="text" id="recvAddr" placeholder="1701 N Senate Ave, Indianapolis IN">
+            <input type="text" id="recvAddr" placeholder="1611 NW 12th Ave, Miami, FL 33136">
             <button type="button" class="clear-btn" onclick="$('recvAddr').value=''" title="Clear">✕</button>
           </div>
           <label>Accepting Physician</label>
@@ -1491,7 +1491,7 @@
           <div class="hint">Or enter manually. Ground per Google Maps; air via great-circle ÷ 135 mph.</div>
 
           <label>Bypassed Closer Facility (if any) + Reason</label>
-          <textarea id="bypass" placeholder="Eskenazi Health was contacted as a closer alternative; bypassed because patient was accepted at Methodist for combined GI/cardiac/pulmonary capability."></textarea>
+          <textarea id="bypass" placeholder="Mariners Hospital was contacted as a closer alternative; bypassed because patient was accepted at Jackson Memorial (Ryder Trauma Center) for combined trauma/neuro/surgical capability."></textarea>
 
           <label>Why Air vs Ground (insurance-accepted; pick one or more, then edit freely)</label>
           <select id="airReasonPicker" onchange="addAirReason()">
@@ -1604,105 +1604,67 @@
   </div>
 </div>
 
-<!-- Indiana Hospitals datalist (with addresses for auto-fill) -->
+<!-- South Florida Hospitals datalist (Keys + Miami-Dade + Broward + Palm Beach; with addresses for auto-fill) -->
 <datalist id="hospitalList">
-  <option value="IU Health Methodist Hospital">
-  <option value="IU Health University Hospital">
-  <option value="IU Health Riley Hospital for Children">
-  <option value="IU Health North Hospital (Carmel)">
-  <option value="IU Health West Hospital (Avon)">
-  <option value="IU Health Saxony Hospital (Fishers)">
-  <option value="IU Health Arnett Hospital (Lafayette)">
-  <option value="IU Health Tipton Hospital">
-  <option value="IU Health Frankfort Hospital">
-  <option value="IU Health Bloomington Hospital">
-  <option value="IU Health Ball Memorial Hospital (Muncie)">
-  <option value="IU Health Bedford Hospital">
-  <option value="IU Health Paoli Hospital">
-  <option value="IU Health Goshen Hospital">
-  <option value="IU Health LaPorte Hospital">
-  <option value="Eskenazi Health">
-  <option value="Riley Hospital for Children at IU Health">
-  <option value="Franciscan Health Indianapolis">
-  <option value="Franciscan Health Mooresville">
-  <option value="Franciscan Health Carmel">
-  <option value="Franciscan Health Lafayette East">
-  <option value="Franciscan Health Crawfordsville">
-  <option value="Franciscan Health Rensselaer">
-  <option value="Franciscan Health Hammond">
-  <option value="Franciscan Health Munster">
-  <option value="Franciscan Health Crown Point">
-  <option value="Franciscan Health Dyer">
-  <option value="Franciscan Health Michigan City">
-  <option value="Ascension St. Vincent Indianapolis">
-  <option value="Ascension St. Vincent Carmel">
-  <option value="Ascension St. Vincent Fishers">
-  <option value="Ascension St. Vincent Anderson">
-  <option value="Ascension St. Vincent Kokomo">
-  <option value="Ascension St. Vincent Williamsport">
-  <option value="Ascension St. Vincent Frankfort">
-  <option value="Ascension St. Vincent Mercy Hospital (Elwood)">
-  <option value="Ascension St. Vincent Salem">
-  <option value="Community Hospital North">
-  <option value="Community Hospital East">
-  <option value="Community Hospital South">
-  <option value="Community Hospital Anderson">
-  <option value="Community Howard Regional Hospital (Kokomo)">
-  <option value="Community Hospital (Munster)">
-  <option value="Major Hospital (Shelbyville)">
-  <option value="Hancock Regional Hospital (Greenfield)">
-  <option value="Johnson Memorial Hospital (Franklin)">
-  <option value="Hendricks Regional Health (Danville)">
-  <option value="Riverview Health (Noblesville)">
-  <option value="Witham Health Services (Lebanon)">
-  <option value="Reid Health (Richmond)">
-  <option value="Henry County Hospital (New Castle)">
-  <option value="Wabash Valley Hospital (Lafayette)">
-  <option value="Tippecanoe County Hospital">
-  <option value="Greater Lafayette Health Services (Lafayette)">
-  <option value="Methodist Hospitals Northlake (Gary)">
-  <option value="Methodist Hospitals Southlake (Merrillville)">
-  <option value="Northwest Health Porter (Valparaiso)">
-  <option value="Northwest Health LaPorte">
-  <option value="Northwest Health Starke (Knox)">
-  <option value="Memorial Hospital of South Bend">
-  <option value="Saint Joseph Health System (Mishawaka)">
-  <option value="Goshen Hospital">
-  <option value="Elkhart General Hospital">
-  <option value="Beacon Memorial Hospital (South Bend)">
-  <option value="Parkview Regional Medical Center (Fort Wayne)">
-  <option value="Parkview Hospital Randallia (Fort Wayne)">
-  <option value="Parkview Huntington Hospital">
-  <option value="Parkview LaGrange Hospital">
-  <option value="Parkview Noble Hospital (Kendallville)">
-  <option value="Parkview Whitley Hospital (Columbia City)">
-  <option value="Parkview Wabash Hospital">
-  <option value="Lutheran Hospital of Indiana (Fort Wayne)">
-  <option value="Dupont Hospital (Fort Wayne)">
-  <option value="Cameron Memorial Community Hospital (Angola)">
-  <option value="Adams Memorial Hospital (Decatur)">
-  <option value="Bluffton Regional Medical Center">
-  <option value="Deaconess Hospital (Evansville)">
-  <option value="Deaconess Gateway Hospital (Newburgh)">
-  <option value="St. Vincent Evansville">
-  <option value="Memorial Hospital of Jasper">
-  <option value="Daviess Community Hospital (Washington)">
-  <option value="Good Samaritan Hospital (Vincennes)">
-  <option value="Greene County General Hospital (Linton)">
-  <option value="Sullivan County Community Hospital">
-  <option value="Union Hospital (Terre Haute)">
-  <option value="Regional Hospital (Terre Haute)">
-  <option value="Putnam County Hospital (Greencastle)">
-  <option value="Margaret Mary Health (Batesville)">
-  <option value="Highpoint Health (Lawrenceburg)">
-  <option value="King's Daughters' Health (Madison)">
-  <option value="Schneck Medical Center (Seymour)">
-  <option value="Jay County Hospital (Portland)">
-  <option value="Rush Memorial Hospital (Rushville)">
-  <option value="Decatur County Memorial Hospital (Greensburg)">
-  <option value="Methodist Hospital of Indiana (Indianapolis)">
-  <option value="Sidney & Lois Eskenazi Hospital">
-  <option value="VA Roudebush Medical Center (Indianapolis)">
+  <!-- Monroe County / Florida Keys -->
+  <option value="Lower Keys Medical Center">
+  <option value="Baptist Health Fishermen's Community Hospital">
+  <option value="Baptist Health Mariners Hospital">
+  <!-- Miami-Dade County -->
+  <option value="Jackson Memorial Hospital (Ryder Trauma Center)">
+  <option value="UHealth Tower (University of Miami Hospital and Clinics)">
+  <option value="Sylvester Comprehensive Cancer Center">
+  <option value="Bruce W. Carter VA Medical Center (Miami VA)">
+  <option value="Jackson South Medical Center">
+  <option value="Jackson North Medical Center">
+  <option value="HCA Florida Kendall Hospital">
+  <option value="HCA Florida Aventura Hospital">
+  <option value="HCA Florida Mercy Hospital">
+  <option value="Baptist Hospital of Miami">
+  <option value="South Miami Hospital">
+  <option value="West Kendall Baptist Hospital">
+  <option value="Homestead Hospital">
+  <option value="Baptist Health Doctors Hospital">
+  <option value="Nicklaus Children's Hospital">
+  <option value="Mount Sinai Medical Center">
+  <option value="North Shore Medical Center">
+  <option value="Palmetto General Hospital">
+  <option value="Hialeah Hospital">
+  <option value="Coral Gables Hospital">
+  <option value="Larkin Community Hospital">
+  <option value="Keralty Hospital Miami (formerly Westchester General)">
+  <!-- Broward County -->
+  <option value="Broward Health Medical Center">
+  <option value="Salah Foundation Children's Hospital">
+  <option value="Broward Health North">
+  <option value="Broward Health Imperial Point">
+  <option value="Broward Health Coral Springs">
+  <option value="Memorial Regional Hospital">
+  <option value="Joe DiMaggio Children's Hospital">
+  <option value="Memorial Hospital West">
+  <option value="Memorial Hospital Pembroke">
+  <option value="Memorial Hospital Miramar">
+  <option value="Holy Cross Health">
+  <option value="Cleveland Clinic Florida (Weston Hospital)">
+  <option value="HCA Florida Westside Hospital">
+  <option value="HCA Florida University Hospital">
+  <option value="HCA Florida Northwest Hospital">
+  <option value="Florida Medical Center">
+  <!-- Palm Beach County -->
+  <option value="St. Mary's Medical Center">
+  <option value="Good Samaritan Medical Center">
+  <option value="HCA Florida JFK Hospital">
+  <option value="HCA Florida JFK North Hospital">
+  <option value="Palm Beach Gardens Medical Center">
+  <option value="Jupiter Medical Center">
+  <option value="HCA Florida Palms West Hospital">
+  <option value="Wellington Regional Medical Center">
+  <option value="Baptist Health Bethesda Hospital East">
+  <option value="Baptist Health Bethesda Hospital West">
+  <option value="Delray Medical Center">
+  <option value="Baptist Health Boca Raton Regional Hospital">
+  <option value="West Boca Medical Center">
+  <option value="Lakeside Medical Center">
   <option value="Other / Custom (type below)">
 </datalist>
 
@@ -4026,102 +3988,65 @@ ${JSON.stringify(data, null, 2)}`;
 
   // ====== Hospital address auto-fill ======
   const HOSPITAL_ADDRESSES = {
-    'IU Health Methodist Hospital': '1701 N Senate Ave, Indianapolis, IN 46202',
-    'IU Health University Hospital': '550 N University Blvd, Indianapolis, IN 46202',
-    'IU Health Riley Hospital for Children': '705 Riley Hospital Dr, Indianapolis, IN 46202',
-    'IU Health North Hospital (Carmel)': '11700 N Meridian St, Carmel, IN 46032',
-    'IU Health West Hospital (Avon)': '1111 N Ronald Reagan Pkwy, Avon, IN 46123',
-    'IU Health Saxony Hospital (Fishers)': '13000 E 136th St, Fishers, IN 46037',
-    'IU Health Arnett Hospital (Lafayette)': '5165 McCarty Ln, Lafayette, IN 47905',
-    'IU Health Tipton Hospital': '1000 S Main St, Tipton, IN 46072',
-    'IU Health Frankfort Hospital': '1300 S Jackson St, Frankfort, IN 46041',
-    'IU Health Bloomington Hospital': '2651 E Discovery Pkwy, Bloomington, IN 47408',
-    'IU Health Ball Memorial Hospital (Muncie)': '2401 W University Ave, Muncie, IN 47303',
-    'IU Health Bedford Hospital': '2900 W 16th St, Bedford, IN 47421',
-    'IU Health Paoli Hospital': '642 W Hospital Rd, Paoli, IN 47454',
-    'IU Health Goshen Hospital': '200 High Park Ave, Goshen, IN 46526',
-    'IU Health LaPorte Hospital': '1007 Lincolnway, La Porte, IN 46350',
-    'Eskenazi Health': '720 Eskenazi Ave, Indianapolis, IN 46202',
-    'Riley Hospital for Children at IU Health': '705 Riley Hospital Dr, Indianapolis, IN 46202',
-    'Franciscan Health Indianapolis': '8111 S Emerson Ave, Indianapolis, IN 46237',
-    'Franciscan Health Mooresville': '1201 Hadley Rd, Mooresville, IN 46158',
-    'Franciscan Health Carmel': '12188 N Meridian St, Carmel, IN 46032',
-    'Franciscan Health Lafayette East': '1701 S Creasy Ln, Lafayette, IN 47905',
-    'Franciscan Health Crawfordsville': '1710 Lafayette Rd, Crawfordsville, IN 47933',
-    'Franciscan Health Rensselaer': '1104 E Grace St, Rensselaer, IN 47978',
-    'Franciscan Health Hammond': '5454 Hohman Ave, Hammond, IN 46320',
-    'Franciscan Health Munster': '701 Superior Ave, Munster, IN 46321',
-    'Franciscan Health Crown Point': '12750 St Francis Dr, Crown Point, IN 46307',
-    'Franciscan Health Dyer': '24 Joliet St, Dyer, IN 46311',
-    'Franciscan Health Michigan City': '3500 Franciscan Way, Michigan City, IN 46360',
-    'Ascension St. Vincent Indianapolis': '2001 W 86th St, Indianapolis, IN 46260',
-    'Ascension St. Vincent Carmel': '13500 N Meridian St, Carmel, IN 46032',
-    'Ascension St. Vincent Fishers': '13861 Olio Rd, Fishers, IN 46037',
-    'Ascension St. Vincent Anderson': '2015 Jackson St, Anderson, IN 46016',
-    'Ascension St. Vincent Kokomo': '1907 W Sycamore St, Kokomo, IN 46901',
-    'Ascension St. Vincent Williamsport': '412 N Monroe St, Williamsport, IN 47993',
-    'Ascension St. Vincent Frankfort': '1300 S Jackson St, Frankfort, IN 46041',
-    'Ascension St. Vincent Mercy Hospital (Elwood)': '1331 S A St, Elwood, IN 46036',
-    'Ascension St. Vincent Salem': '911 N Shelby St, Salem, IN 47167',
-    'Community Hospital North': '7150 Clearvista Dr, Indianapolis, IN 46256',
-    'Community Hospital East': '1500 N Ritter Ave, Indianapolis, IN 46219',
-    'Community Hospital South': '1402 E County Line Rd S, Indianapolis, IN 46227',
-    'Community Hospital Anderson': '1515 N Madison Ave, Anderson, IN 46011',
-    'Community Howard Regional Hospital (Kokomo)': '3500 S LaFountain St, Kokomo, IN 46902',
-    'Community Hospital (Munster)': '901 MacArthur Blvd, Munster, IN 46321',
-    'Major Hospital (Shelbyville)': '2451 Intelliplex Dr, Shelbyville, IN 46176',
-    'Hancock Regional Hospital (Greenfield)': '801 N State St, Greenfield, IN 46140',
-    'Johnson Memorial Hospital (Franklin)': '1125 W Jefferson St, Franklin, IN 46131',
-    'Hendricks Regional Health (Danville)': '1000 E Main St, Danville, IN 46122',
-    'Riverview Health (Noblesville)': '395 Westfield Rd, Noblesville, IN 46060',
-    'Witham Health Services (Lebanon)': '2705 N Lebanon St, Lebanon, IN 46052',
-    'Reid Health (Richmond)': '1100 Reid Pkwy, Richmond, IN 47374',
-    'Henry County Hospital (New Castle)': '1000 N 16th St, New Castle, IN 47362',
-    'Wabash Valley Hospital (Lafayette)': '2900 N River Rd, West Lafayette, IN 47906',
-    'Tippecanoe County Hospital': '4000 St Francis Way, Lafayette, IN 47905',
-    'Greater Lafayette Health Services (Lafayette)': '4000 St Francis Way, Lafayette, IN 47905',
-    'Methodist Hospitals Northlake (Gary)': '600 Grant St, Gary, IN 46402',
-    'Methodist Hospitals Southlake (Merrillville)': '8701 Broadway, Merrillville, IN 46410',
-    'Northwest Health Porter (Valparaiso)': '85 E US Hwy 6, Valparaiso, IN 46383',
-    'Northwest Health LaPorte': '1007 Lincolnway, La Porte, IN 46350',
-    'Northwest Health Starke (Knox)': '102 E Culver Rd, Knox, IN 46534',
-    'Memorial Hospital of South Bend': '615 N Michigan St, South Bend, IN 46601',
-    'Saint Joseph Health System (Mishawaka)': '5215 Holy Cross Pkwy, Mishawaka, IN 46545',
-    'Goshen Hospital': '200 High Park Ave, Goshen, IN 46526',
-    'Elkhart General Hospital': '600 East Blvd, Elkhart, IN 46514',
-    'Beacon Memorial Hospital (South Bend)': '615 N Michigan St, South Bend, IN 46601',
-    'Parkview Regional Medical Center (Fort Wayne)': '11109 Parkview Plaza Dr, Fort Wayne, IN 46845',
-    'Parkview Hospital Randallia (Fort Wayne)': '2200 Randallia Dr, Fort Wayne, IN 46805',
-    'Parkview Huntington Hospital': '2001 Stults Rd, Huntington, IN 46750',
-    'Parkview LaGrange Hospital': '207 N Townline Rd, LaGrange, IN 46761',
-    'Parkview Noble Hospital (Kendallville)': '401 Sawyer Rd, Kendallville, IN 46755',
-    'Parkview Whitley Hospital (Columbia City)': '1260 E State Rd 205, Columbia City, IN 46725',
-    'Parkview Wabash Hospital': '710 N East St, Wabash, IN 46992',
-    'Lutheran Hospital of Indiana (Fort Wayne)': '7950 W Jefferson Blvd, Fort Wayne, IN 46804',
-    'Dupont Hospital (Fort Wayne)': '2520 E Dupont Rd, Fort Wayne, IN 46825',
-    'Cameron Memorial Community Hospital (Angola)': '416 E Maumee St, Angola, IN 46703',
-    'Adams Memorial Hospital (Decatur)': '1100 Mercer Ave, Decatur, IN 46733',
-    'Bluffton Regional Medical Center': '303 S Main St, Bluffton, IN 46714',
-    'Deaconess Hospital (Evansville)': '600 Mary St, Evansville, IN 47710',
-    'Deaconess Gateway Hospital (Newburgh)': '4011 Gateway Blvd, Newburgh, IN 47630',
-    'St. Vincent Evansville': '3700 Washington Ave, Evansville, IN 47750',
-    'Memorial Hospital of Jasper': '800 W 9th St, Jasper, IN 47546',
-    'Daviess Community Hospital (Washington)': '1314 E Walnut St, Washington, IN 47501',
-    'Good Samaritan Hospital (Vincennes)': '520 S 7th St, Vincennes, IN 47591',
-    'Greene County General Hospital (Linton)': '1185 N 1000 W, Linton, IN 47441',
-    'Sullivan County Community Hospital': '2200 N Section St, Sullivan, IN 47882',
-    'Union Hospital (Terre Haute)': '1606 N 7th St, Terre Haute, IN 47804',
-    'Regional Hospital (Terre Haute)': '3901 S 7th St, Terre Haute, IN 47802',
-    'Putnam County Hospital (Greencastle)': '1542 S Bloomington St, Greencastle, IN 46135',
-    'Margaret Mary Health (Batesville)': '321 Mitchell Ave, Batesville, IN 47006',
-    'Highpoint Health (Lawrenceburg)': '600 Wilson Creek Rd, Lawrenceburg, IN 47025',
-    "King's Daughters' Health (Madison)": '1373 E State Rd 62, Madison, IN 47250',
-    'Schneck Medical Center (Seymour)': '411 W Tipton St, Seymour, IN 47274',
-    'Jay County Hospital (Portland)': '500 W Votaw St, Portland, IN 47371',
-    'Rush Memorial Hospital (Rushville)': '1300 N Main St, Rushville, IN 46173',
-    'Decatur County Memorial Hospital (Greensburg)': '720 N Lincoln St, Greensburg, IN 47240',
-    'Sidney & Lois Eskenazi Hospital': '720 Eskenazi Ave, Indianapolis, IN 46202',
-    'VA Roudebush Medical Center (Indianapolis)': '1481 W 10th St, Indianapolis, IN 46202',
+    // Monroe County / Florida Keys
+    'Lower Keys Medical Center': '5900 College Road, Key West, FL 33040',
+    'Baptist Health Fishermen\'s Community Hospital': '3301 Overseas Highway, Marathon, FL 33050',
+    'Baptist Health Mariners Hospital': '91500 Overseas Highway, Tavernier, FL 33070',
+    // Miami-Dade County
+    'Jackson Memorial Hospital (Ryder Trauma Center)': '1611 NW 12th Avenue, Miami, FL 33136',
+    'UHealth Tower (University of Miami Hospital and Clinics)': '1400 NW 12th Avenue, Miami, FL 33136',
+    'Sylvester Comprehensive Cancer Center': '1475 NW 12th Avenue, Miami, FL 33136',
+    'Bruce W. Carter VA Medical Center (Miami VA)': '1201 NW 16th Street, Miami, FL 33125',
+    'Jackson South Medical Center': '9333 SW 152nd Street, Miami, FL 33157',
+    'Jackson North Medical Center': '160 NW 170th Street, North Miami Beach, FL 33169',
+    'HCA Florida Kendall Hospital': '11750 Bird Road, Miami, FL 33175',
+    'HCA Florida Aventura Hospital': '20900 Biscayne Boulevard, Aventura, FL 33180',
+    'HCA Florida Mercy Hospital': '3663 South Miami Avenue, Miami, FL 33133',
+    'Baptist Hospital of Miami': '8900 North Kendall Drive, Miami, FL 33176',
+    'South Miami Hospital': '6200 SW 73rd Street, South Miami, FL 33143',
+    'West Kendall Baptist Hospital': '9555 SW 162nd Avenue, Miami, FL 33196',
+    'Homestead Hospital': '975 Baptist Way, Homestead, FL 33033',
+    'Baptist Health Doctors Hospital': '5000 University Drive, Coral Gables, FL 33146',
+    'Nicklaus Children\'s Hospital': '3100 SW 62nd Avenue, Miami, FL 33155',
+    'Mount Sinai Medical Center': '4300 Alton Road, Miami Beach, FL 33140',
+    'North Shore Medical Center': '1100 NW 95th Street, Miami, FL 33150',
+    'Palmetto General Hospital': '2001 West 68th Street, Hialeah, FL 33016',
+    'Hialeah Hospital': '651 East 25th Street, Hialeah, FL 33013',
+    'Coral Gables Hospital': '3100 Douglas Road, Coral Gables, FL 33134',
+    'Larkin Community Hospital': '7031 SW 62nd Avenue, South Miami, FL 33143',
+    'Keralty Hospital Miami (formerly Westchester General)': '2500 SW 75th Avenue, Miami, FL 33155',
+    // Broward County
+    'Broward Health Medical Center': '1600 South Andrews Avenue, Fort Lauderdale, FL 33316',
+    'Salah Foundation Children\'s Hospital': '1600 South Andrews Avenue, Fort Lauderdale, FL 33316',
+    'Broward Health North': '201 East Sample Road, Deerfield Beach, FL 33064',
+    'Broward Health Imperial Point': '6401 North Federal Highway, Fort Lauderdale, FL 33308',
+    'Broward Health Coral Springs': '3000 Coral Hills Drive, Coral Springs, FL 33065',
+    'Memorial Regional Hospital': '3501 Johnson Street, Hollywood, FL 33021',
+    'Joe DiMaggio Children\'s Hospital': '1005 Joe DiMaggio Drive, Hollywood, FL 33021',
+    'Memorial Hospital West': '703 North Flamingo Road, Pembroke Pines, FL 33028',
+    'Memorial Hospital Pembroke': '7800 Sheridan Street, Pembroke Pines, FL 33024',
+    'Memorial Hospital Miramar': '1901 SW 172nd Avenue, Miramar, FL 33029',
+    'Holy Cross Health': '4725 North Federal Highway, Fort Lauderdale, FL 33308',
+    'Cleveland Clinic Florida (Weston Hospital)': '2950 Cleveland Clinic Boulevard, Weston, FL 33331',
+    'HCA Florida Westside Hospital': '8201 West Broward Boulevard, Plantation, FL 33324',
+    'HCA Florida University Hospital': '3476 South University Drive, Davie, FL 33328',
+    'HCA Florida Northwest Hospital': '2801 North State Road 7, Margate, FL 33063',
+    'Florida Medical Center': '5000 West Oakland Park Boulevard, Lauderdale Lakes, FL 33313',
+    // Palm Beach County
+    'St. Mary\'s Medical Center': '901 45th Street, West Palm Beach, FL 33407',
+    'Good Samaritan Medical Center': '1309 North Flagler Drive, West Palm Beach, FL 33401',
+    'HCA Florida JFK Hospital': '5301 South Congress Avenue, Atlantis, FL 33462',
+    'HCA Florida JFK North Hospital': '2201 45th Street, West Palm Beach, FL 33407',
+    'Palm Beach Gardens Medical Center': '3360 Burns Road, Palm Beach Gardens, FL 33410',
+    'Jupiter Medical Center': '1210 South Old Dixie Highway, Jupiter, FL 33458',
+    'HCA Florida Palms West Hospital': '13001 Southern Boulevard, Loxahatchee, FL 33470',
+    'Wellington Regional Medical Center': '10101 Forest Hill Boulevard, Wellington, FL 33414',
+    'Baptist Health Bethesda Hospital East': '2815 South Seacrest Boulevard, Boynton Beach, FL 33435',
+    'Baptist Health Bethesda Hospital West': '9655 Boynton Beach Boulevard, Boynton Beach, FL 33472',
+    'Delray Medical Center': '5352 Linton Boulevard, Delray Beach, FL 33484',
+    'Baptist Health Boca Raton Regional Hospital': '800 Meadows Road, Boca Raton, FL 33486',
+    'West Boca Medical Center': '21644 State Road 7, Boca Raton, FL 33428',
+    'Lakeside Medical Center': '39200 Hooker Highway, Belle Glade, FL 33430',
   };
 
   function autoFillHospAddr(which){
