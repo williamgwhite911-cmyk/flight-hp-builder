@@ -1456,8 +1456,23 @@
               <div><label>Mode</label>
                 <select id="vMode">
                   <option value="">—</option>
-                  <option>AC/VC</option><option>AC/PC</option><option>SIMV</option>
-                  <option>PRVC</option><option>CPAP</option><option>BiPAP</option>
+                  <optgroup label="Hamilton T2">
+                    <option>(S)CMV+</option>
+                    <option>APVcmv</option>
+                    <option>SIMV+</option>
+                    <option>APVsimv</option>
+                    <option>SPONT (PSV)</option>
+                    <option>ASV</option>
+                    <option>DuoPAP</option>
+                    <option>APRV</option>
+                    <option>NIV</option>
+                    <option>NIV-ST</option>
+                    <option>nCPAP-PS</option>
+                  </optgroup>
+                  <optgroup label="Generic">
+                    <option>AC/VC</option><option>AC/PC</option><option>SIMV</option>
+                    <option>PRVC</option><option>CPAP</option><option>BiPAP</option>
+                  </optgroup>
                 </select>
               </div>
               <div><label>FiO2</label><input type="text" id="vFiO2" placeholder="40%"></div>
@@ -1467,8 +1482,32 @@
               <div><label>Rate</label><input type="text" id="vRate" placeholder="14"></div>
               <div><label>PEEP</label><input type="text" id="vPEEP" placeholder="5"></div>
             </div>
-            <label>Pressure Support</label>
+            <label>Pressure Support (ΔPsupport)</label>
             <input type="text" id="vPS" placeholder="10">
+
+            <div style="margin-top:12px;font-weight:600;color:#0c4a6e;font-size:13px">Hamilton T2 — additional settings</div>
+            <div class="row-3">
+              <div><label>Pinsp / Pcontrol</label><input type="text" id="vPinsp" placeholder="15 cmH₂O"></div>
+              <div><label>I:E ratio</label><input type="text" id="vIE" placeholder="1:2"></div>
+              <div><label>Insp. time (Ti)</label><input type="text" id="vTi" placeholder="1.0 s"></div>
+            </div>
+            <div class="row-3">
+              <div><label>Flow trigger</label><input type="text" id="vTrig" placeholder="2 L/min"></div>
+              <div><label>P-ramp (rise)</label><input type="text" id="vPramp" placeholder="50 ms"></div>
+              <div><label>ETS</label><input type="text" id="vETS" placeholder="25%"></div>
+            </div>
+            <div class="row-3">
+              <div><label>ASV %MinVol</label><input type="text" id="vASV" placeholder="100%"></div>
+              <div><label>IBW / PBW</label><input type="text" id="vIBW" placeholder="60 kg"></div>
+              <div><label>Pmax / limit</label><input type="text" id="vPmax" placeholder="35 cmH₂O"></div>
+            </div>
+            <div style="margin-top:10px;font-weight:600;color:#0c4a6e;font-size:13px">Measured / monitored</div>
+            <div class="row-4">
+              <div><label>Ppeak</label><input type="text" id="vPpeak" placeholder="24"></div>
+              <div><label>Pplateau</label><input type="text" id="vPplat" placeholder="18"></div>
+              <div><label>Pmean (MAP)</label><input type="text" id="vMAP" placeholder="9"></div>
+              <div><label>Exh. MinVol</label><input type="text" id="vMinVol" placeholder="7.2 L"></div>
+            </div>
           </div>
           <div class="ocr-block" id="ocrBlockVent" style="display:none;margin-top:8px">
             <label class="ocr-label" for="ocrVentFile">📷 Vent screen photo (pilot) — cover patient identifiers first</label>
@@ -3109,7 +3148,12 @@ Return plain text only.`;
       rsi: val('rsi'),
       sedation: val('sedation'),
       vent: isVent ? { mode: val('vMode'), fio2: val('vFiO2'), tv: val('vTV'),
-                       rate: val('vRate'), peep: val('vPEEP'), ps: val('vPS') } : null,
+                       rate: val('vRate'), peep: val('vPEEP'), ps: val('vPS'),
+                       pinsp: val('vPinsp'), ie: val('vIE'), ti: val('vTi'),
+                       trigger: val('vTrig'), pramp: val('vPramp'), ets: val('vETS'),
+                       asvMinVol: val('vASV'), ibw: val('vIBW'), pmax: val('vPmax'),
+                       ppeak: val('vPpeak'), pplat: val('vPplat'), map: val('vMAP'),
+                       minVol: val('vMinVol') } : null,
       distance: { dGround: val('dGround'), tGround: val('tGround'),
                   dAir: val('dAir'), tAir: val('tAir') },
       bypass: val('bypass'),
@@ -3180,13 +3224,18 @@ Initial Vital Signs (prior to flight crew arrival):
 - Temp: [temp]
 - Blood Glucose: [glu]
 
-Ventilator Settings (only include this section if patient is intubated):
+Ventilator Settings (only include this section if patient is intubated; Hamilton T2 transport ventilator — include only the parameters that have values):
 - Mode: [mode]
 - Tidal Volume (TV): [tv]
 - Rate: [rate]
-- PEEP: [peep]
+- PEEP/CPAP: [peep]
 - FiO2: [fio2]
-- Pressure Support: [ps]
+- Pressure Support (ΔPsupport): [ps]
+- Pinsp/Pcontrol: [pinsp]
+- I:E ratio: [ie]   Inspiratory time (Ti): [ti]
+- Flow trigger: [trigger]   P-ramp (rise time): [pramp]   ETS: [ets]
+- ASV %MinVol: [asvMinVol]   IBW/PBW: [ibw]   Pmax/limit: [pmax]
+- Measured: Ppeak [ppeak], Pplateau [pplat], Pmean/MAP [map], exhaled MinVol [minVol]
 
 Transport Details and Justification
 
@@ -3393,14 +3442,16 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no m
     const n = files.length;
     status.innerHTML = `<span class="spinner"></span> Extracting vent settings from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
-    const prompt = `Examine the mechanical ventilator screen photo(s) and extract the current settings. If multiple photos show different states, prefer the most recent/most complete view. Return ONLY a JSON object:
-{ "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "", "ie_ratio": "", "peak_pressure": "", "plateau_pressure": "", "minute_ventilation": "" }
-- "mode": ventilator mode as shown (e.g., "AC/VC", "PRVC", "SIMV", "CPAP")
-- "fio2": as percentage (e.g., "40%")
-- "tv": tidal volume in mL
-- "rate": set respiratory rate (breaths/min)
-- "peep": PEEP in cmH2O
-- "ps": pressure support in cmH2O
+    const prompt = `Examine the mechanical ventilator screen photo(s) — often a Hamilton T2 transport ventilator — and extract the current settings and monitored values. If multiple photos show different states, prefer the most recent/most complete view. Return ONLY a JSON object:
+{ "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "", "pinsp": "", "ie_ratio": "", "ti": "", "trigger": "", "pramp": "", "ets": "", "asv_minvol": "", "ibw": "", "pmax": "", "peak_pressure": "", "plateau_pressure": "", "mean_pressure": "", "minute_ventilation": "" }
+- "mode": ventilator mode as shown (Hamilton: "(S)CMV+", "APVcmv", "SIMV+", "APVsimv", "SPONT", "ASV", "DuoPAP", "APRV", "NIV"; or generic "AC/VC", "PRVC", "SIMV", "CPAP")
+- "fio2": oxygen as percentage (e.g., "40%")
+- "tv": tidal volume in mL;  "rate": set respiratory rate (breaths/min)
+- "peep": PEEP/CPAP in cmH2O;  "ps": pressure support / ΔPsupport in cmH2O
+- "pinsp": Pinsp/Pcontrol in cmH2O;  "ie_ratio": e.g., "1:2";  "ti": inspiratory time in seconds
+- "trigger": flow trigger (L/min);  "pramp": pressure ramp / rise time (ms);  "ets": expiratory trigger sensitivity (%)
+- "asv_minvol": ASV %MinVol;  "ibw": ideal/predicted body weight;  "pmax": pressure limit (cmH2O)
+- "peak_pressure" (Ppeak), "plateau_pressure" (Pplat), "mean_pressure" (Pmean/MAP), "minute_ventilation" (exhaled MinVol)
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     try {
       let text = await callClaudeVisionMulti(prompt, files);
@@ -3416,6 +3467,19 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
       setIfFilled('vRate', data.rate);
       setIfFilled('vPEEP', data.peep);
       setIfFilled('vPS', data.ps);
+      setIfFilled('vPinsp', data.pinsp);
+      setIfFilled('vIE', data.ie_ratio);
+      setIfFilled('vTi', data.ti);
+      setIfFilled('vTrig', data.trigger);
+      setIfFilled('vPramp', data.pramp);
+      setIfFilled('vETS', data.ets);
+      setIfFilled('vASV', data.asv_minvol);
+      setIfFilled('vIBW', data.ibw);
+      setIfFilled('vPmax', data.pmax);
+      setIfFilled('vPpeak', data.peak_pressure);
+      setIfFilled('vPplat', data.plateau_pressure);
+      setIfFilled('vMAP', data.mean_pressure);
+      setIfFilled('vMinVol', data.minute_ventilation);
       status.innerHTML = '✓ Vent settings populated. Review for accuracy.';
       status.style.color = '#16a34a';
     } catch (err) {
@@ -4692,6 +4756,11 @@ ${transcript}`;
       setIf('vMode', d.vent.mode); setIf('vFiO2', d.vent.fio2);
       setIf('vTV', d.vent.tv); setIf('vRate', d.vent.rate);
       setIf('vPEEP', d.vent.peep); setIf('vPS', d.vent.ps);
+      setIf('vPinsp', d.vent.pinsp); setIf('vIE', d.vent.ie); setIf('vTi', d.vent.ti);
+      setIf('vTrig', d.vent.trigger); setIf('vPramp', d.vent.pramp); setIf('vETS', d.vent.ets);
+      setIf('vASV', d.vent.asvMinVol); setIf('vIBW', d.vent.ibw); setIf('vPmax', d.vent.pmax);
+      setIf('vPpeak', d.vent.ppeak); setIf('vPplat', d.vent.pplat);
+      setIf('vMAP', d.vent.map); setIf('vMinVol', d.vent.minVol);
     }
     if (d.distance) {
       setIf('dGround', d.distance.dGround); setIf('tGround', d.distance.tGround);
@@ -5027,11 +5096,26 @@ ${transcript}`;
       if (v.fio2) parts.push('FiO2 ' + v.fio2);
       if (v.tv) parts.push('TV ' + v.tv);
       if (v.rate) parts.push('Rate ' + v.rate);
-      if (v.peep) parts.push('PEEP ' + v.peep);
-      if (v.ps) parts.push('PS ' + v.ps);
-      if (parts.length) {
-        html += '<h2>Ventilator Settings</h2>';
-        html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
+      if (v.peep) parts.push('PEEP/CPAP ' + v.peep);
+      if (v.ps) parts.push('ΔPsupport ' + v.ps);
+      if (v.pinsp) parts.push('Pinsp ' + v.pinsp);
+      if (v.ie) parts.push('I:E ' + v.ie);
+      if (v.ti) parts.push('Ti ' + v.ti);
+      if (v.trigger) parts.push('Trigger ' + v.trigger);
+      if (v.pramp) parts.push('P-ramp ' + v.pramp);
+      if (v.ets) parts.push('ETS ' + v.ets);
+      if (v.asvMinVol) parts.push('ASV %MinVol ' + v.asvMinVol);
+      if (v.ibw) parts.push('IBW ' + v.ibw);
+      if (v.pmax) parts.push('Pmax ' + v.pmax);
+      const mon = [];
+      if (v.ppeak) mon.push('Ppeak ' + v.ppeak);
+      if (v.pplat) mon.push('Pplat ' + v.pplat);
+      if (v.map) mon.push('Pmean ' + v.map);
+      if (v.minVol) mon.push('exh MinVol ' + v.minVol);
+      if (parts.length || mon.length) {
+        html += '<h2>Ventilator Settings (Hamilton T2)</h2>';
+        if (parts.length) html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
+        if (mon.length) html += `<p><b>Measured:</b> ${escapeHtml(mon.join(' · '))}</p>`;
       }
     }
 
