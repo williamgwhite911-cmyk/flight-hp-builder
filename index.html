@@ -786,6 +786,11 @@
   <div class="form active">
 
     <fieldset class="plain">
+      <legend style="font-weight:700;color:#0c4a6e;font-size:12px;text-transform:uppercase">OCA Number</legend>
+      <input type="text" id="ocaNumber" placeholder="OCA / run number">
+    </fieldset>
+
+    <fieldset class="plain">
       <legend style="font-weight:700;color:#0c4a6e;font-size:12px;text-transform:uppercase">Call Type</legend>
       <div class="toggle-group">
         <label><input type="radio" name="callType" value="ift" checked><span>Interfacility (IFT)</span></label>
@@ -3104,6 +3109,7 @@ Return plain text only.`;
     const isVent = document.querySelector('input[name=vented]:checked').value === 'yes';
     return {
       mode,
+      oca: val('ocaNumber'),
       statFlight: val('statFlightNum'),
       aircraft: val('aircraft'),
       crewRN: val('flightRN'),
@@ -4957,6 +4963,7 @@ ${transcript}`;
     // Flight info block
     const flightMeta = [];
     flightMeta.push(['Report generated', `${dateStr} ${timeStr}`]);
+    if (d.oca) flightMeta.push(['OCA number', d.oca]);
     flightMeta.push(['Call type', d.mode === 'ift' ? 'Interfacility (IFT)' : 'Scene']);
     if (d.statFlight) flightMeta.push(['Flight number', d.statFlight]);
     if (d.aircraft) flightMeta.push(['Aircraft', d.aircraft]);
