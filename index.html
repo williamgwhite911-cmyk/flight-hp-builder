@@ -892,6 +892,14 @@
               <input type="text" id="ptWeight" list="weightList" placeholder="180 lb or 82 kg" oninput="updateWeightConv()">
             </div>
           </div>
+          <div class="row">
+            <div><label>Driver's License #</label>
+              <input type="text" id="ptDLNum" placeholder="auto-filled from license photo">
+            </div>
+            <div><label>License Expiration</label>
+              <input type="text" id="ptDLExp" placeholder="MM/DD/YYYY">
+            </div>
+          </div>
 
           <label style="margin-top:10px">Driver's License Photo (stored on device; embeds in printed report)</label>
           <input type="file" id="ptLicenseFile" accept="image/*" multiple onchange="handleLicensePhoto(event)" style="display:none">
@@ -2320,8 +2328,8 @@ Return ONLY the JSON object, no markdown.`;
     if (!licensePhotoDataUrls.length) { alert('Upload at least one license photo first.'); return; }
     if (!confirmPhi("driver's license")) return;
     const files = await dataUrlsToFiles(licensePhotoDataUrls, 'license');
-    const prompt = `Examine the US driver's license photo(s) (may include front and back, or multiple angles) and extract the personal information visible. Return ONLY a JSON object:
-{ "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "Full street address", "height": "5'10\\"" or "70 in", "weight": "180 lb", "sex": "M|F" }
+    const prompt = `Examine the US driver's license photo(s) (may include front and back, or multiple angles) and extract ALL personal information visible. Return ONLY a JSON object:
+{ "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "Full street address", "height": "5'10\\"" or "70 in", "weight": "180 lb", "sex": "M|F", "dlNumber": "license/ID number", "dlExpiration": "MM/DD/YYYY" }
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON object, no markdown.`;
     try {
       let text = await callClaudeVisionMulti(prompt, files);
@@ -2336,6 +2344,8 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
       if (data.sex && !val('ptSex')) {
         $('ptSex').value = data.sex === 'M' ? 'Male' : (data.sex === 'F' ? 'Female' : '');
       }
+      setIfEmpty('ptDLNum', data.dlNumber);
+      setIfEmpty('ptDLExp', data.dlExpiration);
       onDobChange();
       alert('Extracted ' + Object.keys(data).filter(k => data[k]).length + ' field(s) from license.');
     } catch (err) {
@@ -3058,6 +3068,8 @@ Return plain text only.`;
         address: val('ptAddress'),
         height: val('ptHeight'),
         weight: val('ptWeight'),
+        dlNumber: val('ptDLNum'),
+        dlExpiration: val('ptDLExp'),
       },
       allergies: gatherAllergies(),
       sending: mode === 'ift'
@@ -4716,6 +4728,7 @@ ${transcript}`;
 
     const narrative = $('narrativeOut').textContent.trim();
     const template = $('templateOut').textContent.trim();
+    const cctText = $('cctOut') ? $('cctOut').textContent.trim() : '';
     const interpText = $('clinicalInterp') ? $('clinicalInterp').textContent.trim() : '';
 
     // ----- Compose face sheet -----
@@ -4765,6 +4778,8 @@ ${transcript}`;
       if (p.address) pmeta.push(['Address', p.address]);
       if (heightDisplay) pmeta.push(['Height', heightDisplay]);
       if (weightDisplay) pmeta.push(['Weight', weightDisplay]);
+      if (p.dlNumber) pmeta.push(["Driver's License #", p.dlNumber]);
+      if (p.dlExpiration) pmeta.push(['License Exp', p.dlExpiration]);
       html += '<div class="meta">';
       pmeta.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
       html += '</div></div>';
@@ -4848,6 +4863,16 @@ ${transcript}`;
     if (template && template !== 'Click "Generate" to build the structured template here.') {
       html += '<h2>Trauma Star Template</h2>';
       html += `<p>${escapeHtml(template)}</p>`;
+    }
+    if (cctText && !cctText.startsWith('Fill in the chart')) {
+      html += '<h2>Critical Care Air Transport Report</h2>';
+      const cctHtml = escapeHtml(cctText).split('\n').map(line => {
+        const t = line.trim();
+        // Bold the ALL-CAPS section headings (MISSION SUMMARY, HOT LOAD, …)
+        if (t && t === t.toUpperCase() && /[A-Z]/.test(t) && t.length < 60) return '<b>' + line + '</b>';
+        return line;
+      }).join('<br>');
+      html += `<p>${cctHtml}</p>`;
     }
 
     // Bedside snapshot — vitals + assessment
