@@ -885,11 +885,11 @@
           <div class="row">
             <div>
               <label>Height <span class="hint" id="ptHeightConv" style="margin-left:6px"></span></label>
-              <input type="text" id="ptHeight" placeholder="5'10&quot; or 70 in or 178 cm" oninput="updateHeightConv()">
+              <input type="text" id="ptHeight" list="heightList" placeholder="5'10&quot; or 70 in or 178 cm" oninput="updateHeightConv()">
             </div>
             <div>
               <label>Weight <span class="hint" id="ptWeightConv" style="margin-left:6px"></span></label>
-              <input type="text" id="ptWeight" placeholder="180 lb or 82 kg" oninput="updateWeightConv()">
+              <input type="text" id="ptWeight" list="weightList" placeholder="180 lb or 82 kg" oninput="updateWeightConv()">
             </div>
           </div>
 
@@ -1557,6 +1557,51 @@
       </details>
     </fieldset>
 
+    <fieldset>
+      <details>
+        <summary>Critical Care Air Transport (hot load/offload, radio, turnover)</summary>
+        <div class="fieldset-body">
+          <div class="row">
+            <div><label>Hot Load (rotors turning)</label>
+              <select id="cctHotLoad">
+                <option value="">—</option>
+                <option value="yes">Yes — hot loaded</option>
+                <option value="no">No — cold load (rotors stopped)</option>
+              </select>
+            </div>
+            <div><label>Hot Load Time</label><input type="time" id="cctHotLoadTime"></div>
+          </div>
+          <label>Hot Load Notes</label>
+          <input type="text" id="cctHotLoadNotes" placeholder="e.g., loaded left side with ground crew assist; secured per protocol">
+
+          <div class="row">
+            <div><label>Hot Offload (rotors turning)</label>
+              <select id="cctHotOffload">
+                <option value="">—</option>
+                <option value="yes">Yes — hot offloaded</option>
+                <option value="no">No — cold offload (rotors stopped)</option>
+              </select>
+            </div>
+            <div><label>Hot Offload Time</label><input type="time" id="cctHotOffloadTime"></div>
+          </div>
+          <label>Hot Offload Notes</label>
+          <input type="text" id="cctHotOffloadNotes" placeholder="e.g., offloaded to awaiting trauma team; rooftop helipad">
+
+          <label>Radio Communication with Receiving Facility</label>
+          <textarea id="cctRadio" rows="3" placeholder="e.g., Called receiving ~10 min out on MED channel; relayed age/sex, dx/MOI, vitals, interventions/drips, and ETA. Report acknowledged by charge RN."></textarea>
+
+          <label>Patient Turnover — Trauma Room</label>
+          <textarea id="cctTurnoverTrauma" rows="2" placeholder="Bedside handoff to trauma team: SBAR, lines/drips & rates, last vitals, pending studies."></textarea>
+
+          <label>Patient Turnover — ICU</label>
+          <textarea id="cctTurnoverICU" rows="2" placeholder="Handoff to ICU RN / intensivist: vent settings, drips & titration, access, code status."></textarea>
+
+          <label>Patient Turnover — Helipad</label>
+          <textarea id="cctTurnoverHelipad" rows="2" placeholder="Handoff on helipad to awaiting team: brief report, monitor transfer, continuity of drips."></textarea>
+        </div>
+      </details>
+    </fieldset>
+
     <button class="add-btn" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;margin-top:14px" onclick="resetForm()" type="button">Reset all fields</button>
   </div>
 
@@ -1594,6 +1639,12 @@
     <div class="output-card">
       <h3>Page 2: Trauma Star Template</h3>
       <div class="narrative" id="templateOut" contenteditable="true">Click "Generate" to build the structured template here.</div>
+    </div>
+
+    <div class="output-card">
+      <h3>Critical Care Air Transport Report <button class="copy-narrative" style="font-size:11px;padding:6px 10px" onclick="copyText('cctOut', this)" type="button">Copy</button></h3>
+      <button class="generate-all" style="width:100%;margin-bottom:8px" onclick="generateCCT()" id="cctBtn" type="button">🚁 Generate CCT Transport Report</button>
+      <div class="narrative" id="cctOut" contenteditable="true">Fill in the chart and the Critical Care Air Transport fields, then click Generate to build the paragraph-format transport report (hot load, en route care, radio report, hot offload, turnover).</div>
     </div>
 
     <div class="output-card">
@@ -1672,6 +1723,66 @@
   <option value="West Boca Medical Center">
   <option value="Lakeside Medical Center">
   <option value="Other / Custom (type below)">
+</datalist>
+
+<!-- Height / Weight pick-or-type datalists -->
+<datalist id="heightList">
+  <option value="4'6&quot;">
+  <option value="4'7&quot;">
+  <option value="4'8&quot;">
+  <option value="4'9&quot;">
+  <option value="4'10&quot;">
+  <option value="4'11&quot;">
+  <option value="5'0&quot;">
+  <option value="5'1&quot;">
+  <option value="5'2&quot;">
+  <option value="5'3&quot;">
+  <option value="5'4&quot;">
+  <option value="5'5&quot;">
+  <option value="5'6&quot;">
+  <option value="5'7&quot;">
+  <option value="5'8&quot;">
+  <option value="5'9&quot;">
+  <option value="5'10&quot;">
+  <option value="5'11&quot;">
+  <option value="6'0&quot;">
+  <option value="6'1&quot;">
+  <option value="6'2&quot;">
+  <option value="6'3&quot;">
+  <option value="6'4&quot;">
+  <option value="6'5&quot;">
+  <option value="6'6&quot;">
+  <option value="6'7&quot;">
+  <option value="6'8&quot;">
+</datalist>
+<datalist id="weightList">
+  <option value="90 lb">
+  <option value="100 lb">
+  <option value="110 lb">
+  <option value="120 lb">
+  <option value="130 lb">
+  <option value="140 lb">
+  <option value="150 lb">
+  <option value="160 lb">
+  <option value="170 lb">
+  <option value="180 lb">
+  <option value="190 lb">
+  <option value="200 lb">
+  <option value="210 lb">
+  <option value="220 lb">
+  <option value="230 lb">
+  <option value="240 lb">
+  <option value="250 lb">
+  <option value="260 lb">
+  <option value="270 lb">
+  <option value="280 lb">
+  <option value="290 lb">
+  <option value="300 lb">
+  <option value="310 lb">
+  <option value="320 lb">
+  <option value="330 lb">
+  <option value="340 lb">
+  <option value="350 lb">
 </datalist>
 
 <!-- Physical assessment datalists -->
@@ -3823,6 +3934,74 @@ ${JSON.stringify(data, null, 2)}`;
     }
   }
 
+  // ====== Critical Care Air Transport report ======
+  function gatherCCT(){
+    return {
+      hotLoad: val('cctHotLoad'), hotLoadTime: val('cctHotLoadTime'), hotLoadNotes: val('cctHotLoadNotes'),
+      hotOffload: val('cctHotOffload'), hotOffloadTime: val('cctHotOffloadTime'), hotOffloadNotes: val('cctHotOffloadNotes'),
+      radio: val('cctRadio'),
+      turnoverTrauma: val('cctTurnoverTrauma'),
+      turnoverICU: val('cctTurnoverICU'),
+      turnoverHelipad: val('cctTurnoverHelipad'),
+    };
+  }
+
+  async function generateCCT(){
+    const settings = loadSettings();
+    if (!settings.anthropic) {
+      setStatus('Anthropic API key required. Open Settings to add one.', true);
+      openSettings();
+      return;
+    }
+    const data = gatherAllData();
+    const cct = gatherCCT();
+    const btn = $('cctBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Generating…';
+    setStatus('<span class="spinner"></span>Generating CCT transport report…');
+    try {
+      const prompt = `You are documenting a CRITICAL CARE AIR TRANSPORT performed by a HEMS crew (flight unit: "${data.statFlight || 'Trauma Star'}", aircraft: "${data.aircraft || 'AW139'}"). Using the structured chart data and the crew's transport notes below, write a thorough, professional report in PARAGRAPH form (past tense, clinical, factual). Organize it under the following section headings — each heading on its own line, in ALL CAPS, followed by one or more paragraphs. OMIT entirely any section with no available information; never invent details.
+
+MISSION SUMMARY
+Open with the flight unit, who requested the transport, the sending facility/agency, the patient (age/sex), the diagnosis / reason for transport, and the receiving facility/unit.
+
+HOT LOAD
+Describe loading the patient onto the aircraft. If hot loaded (rotors turning), state that explicitly with the time and any notes. If a cold load, state the aircraft was shut down for loading. (hotLoad="yes" means rotors turning.)
+
+EN ROUTE CRITICAL CARE
+Summarize clinical status and all critical-care management during flight: airway/ventilator settings, drips and titration, IV/IO access, monitoring, interventions, and the patient's response. Draw on the vitals, vent, drips, IV, RSI/sedation, and assessment data.
+
+RADIO COMMUNICATION WITH RECEIVING FACILITY
+Describe the radio report given to the receiving facility en route — content relayed, channel if noted, ETA, and acknowledgment.
+
+HOT OFFLOAD
+Describe offloading at the destination. If hot offloaded (rotors turning), state that explicitly with time and notes; otherwise note a cold offload.
+
+PATIENT TURNOVER
+Provide the bedside handoff. Include a "Trauma Room", "ICU", and/or "Helipad" sub-paragraph ONLY for the location(s) the crew documented. Each should read as an SBAR-style handoff: report given, lines/drips and rates, last vitals, and pending items.
+
+Return ONLY the report text — no markdown, no code fences, no JSON.
+
+CREW TRANSPORT NOTES:
+${JSON.stringify(cct, null, 2)}
+
+CHART DATA:
+${JSON.stringify(data, null, 2)}`;
+      let response = await callAnthropic(prompt);
+      response = response.replace(/^```(?:json|text)?\s*/i, '').replace(/```\s*$/, '').trim();
+      $('cctOut').textContent = response;
+      $('cctOut').classList.add('polished');
+      btn.disabled = false;
+      btn.innerHTML = '🚁 Regenerate CCT Report';
+      setStatus('CCT report generated.');
+      setTimeout(() => setStatus(''), 2000);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '🚁 Generate CCT Transport Report';
+      setStatus('CCT generation failed: ' + (err.message || err), true);
+    }
+  }
+
   // ====== Medication Summary (Phase 3b) ======
   // Cached AI-extracted medications array — reused by printReport().
   let lastMedications = [];
@@ -3991,6 +4170,10 @@ ${JSON.stringify(data, null, 2)}`;
     $('templateOut').textContent = 'Click "Generate" to build the structured template here.';
     $('narrativeOut').classList.remove('polished');
     $('templateOut').classList.remove('polished');
+    if ($('cctOut')) {
+      $('cctOut').textContent = 'Fill in the chart and the Critical Care Air Transport fields, then click Generate to build the paragraph-format transport report (hot load, en route care, radio report, hot offload, turnover).';
+      $('cctOut').classList.remove('polished');
+    }
     $('complianceList').innerHTML = '';
     $('distanceCard').style.display = 'none';
     if ($('mapCard')) { $('mapCard').style.display = 'none'; $('routeMap').src = 'about:blank'; }
