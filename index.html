@@ -3402,7 +3402,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
     });
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`API ${response.status}: ${err.slice(0, 200)}`);
+      throw new Error(friendlyApiError(response.status, err));
     }
     const data = await response.json();
     if (!data.content || !data.content[0] || !data.content[0].text) {
@@ -3545,7 +3545,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     });
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`API ${response.status}: ${err.slice(0, 200)}`);
+      throw new Error(friendlyApiError(response.status, err));
     }
     const data = await response.json();
     if (!data.content || !data.content[0] || !data.content[0].text) {
@@ -3974,6 +3974,24 @@ ${JSON.stringify(data, null, 2)}`;
   }
 
   // ====== Anthropic API call ======
+  // Turn a raw Anthropic API error body into a clear, actionable message.
+  function friendlyApiError(status, errText){
+    const raw = String(errText || '');
+    let msg = '';
+    try { const j = JSON.parse(raw); msg = (j.error && j.error.message) ? j.error.message : ''; } catch (e) {}
+    const low = (msg || raw).toLowerCase();
+    if (/credit balance is too low|plans & billing|purchase credits|insufficient.*(quota|credit)|billing/.test(low))
+      return 'Your Anthropic API account is out of credits. Go to console.anthropic.com → Plans & Billing to add credits or set up auto-reload, then try again. (This is separate from any Claude.ai subscription.)';
+    if (status === 401 || /invalid x-api-key|authentication_error|invalid api key|unauthorized/.test(low))
+      return 'Your Anthropic API key looks invalid or is missing. Open ⚙ Settings and re-enter your key (it should start with "sk-ant-").';
+    if (status === 429 || /rate.?limit/.test(low))
+      return 'Anthropic API rate limit reached. Wait a few seconds and try again.';
+    if (status === 529 || /overloaded/.test(low))
+      return 'Anthropic API is temporarily overloaded. Wait a moment and try again.';
+    if (msg) return 'API error: ' + msg;
+    return `API error ${status}: ${raw.slice(0, 200)}`;
+  }
+
   async function callAnthropic(prompt){
     const settings = loadSettings();
     if (!settings.anthropic) throw new Error('No API key set. Open Settings.');
@@ -3993,7 +4011,7 @@ ${JSON.stringify(data, null, 2)}`;
     });
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`API error ${response.status}: ${err.slice(0, 300)}`);
+      throw new Error(friendlyApiError(response.status, err));
     }
     const data = await response.json();
     if (!data.content || !data.content[0] || !data.content[0].text) {
@@ -4661,7 +4679,7 @@ Return ONLY the JSON object. No markdown fencing.`;
       });
       if (!response.ok) {
         const err = await response.text();
-        throw new Error(`API ${response.status}: ${err.slice(0, 300)}`);
+        throw new Error(friendlyApiError(response.status, err));
       }
       const data = await response.json();
       if (!data.content || !data.content[0] || !data.content[0].text) {
