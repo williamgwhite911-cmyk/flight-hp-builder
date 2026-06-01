@@ -59,11 +59,12 @@
     gap: 0;
   }
   @media (max-width: 1000px) {
-    .layout { grid-template-columns: 1fr; }
-    .form, .output { max-height: none !important; }
-    .tabs { display: flex; }
-    .form, .output { display: none; }
-    .form.active, .output.active { display: block; }
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .form, .output { max-height: none !important; overflow: visible !important; min-width: 0; }
+    /* Show the full app in one continuous scroll on mobile (identical to desktop);
+       the tab bar acts as quick jump-to-section links. */
+    .tabs { display: flex !important; }
+    .form, .output { display: block; }
   }
   .tabs {
     display: none;
@@ -102,6 +103,8 @@
     padding: 0;
     margin: 0 0 10px;
     background: #f8fafc;
+    min-width: 0;
+    min-inline-size: 0;
   }
   details > summary {
     cursor: pointer;
@@ -149,9 +152,9 @@
     border-color: #0ea5e9;
     box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2);
   }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .row-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+  .row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+  .row-3 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 8px; }
+  .row-4 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 6px; }
 
   .toggle-group { display: flex; gap: 6px; margin-top: 4px; }
   .toggle-group label {
@@ -552,10 +555,11 @@
   /* Crew Times — input + Now button */
   .time-now-row {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0,1fr) auto;
     gap: 6px;
     align-items: stretch;
   }
+  .time-now-row input { min-width: 0; }
   .now-btn {
     background: #0ea5e9;
     color: white;
@@ -2479,8 +2483,11 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
   function switchTab(tab){
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelector(`.tab:nth-child(${tab === 'form' ? 1 : 2})`).classList.add('active');
+    // Both panels are always visible on mobile now; the tabs just jump to a section.
     document.querySelector('.form').classList.toggle('active', tab === 'form');
     document.querySelector('.output').classList.toggle('active', tab === 'output');
+    const target = document.querySelector(tab === 'form' ? '.form' : '.output');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   // Status
