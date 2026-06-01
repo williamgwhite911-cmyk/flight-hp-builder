@@ -1485,10 +1485,10 @@
           </div>
           <div class="row">
             <div><label>Air distance (mi)</label><input type="number" id="dAir" step="0.1" placeholder="85"></div>
-            <div><label>Air time (min)</label><input type="number" id="tAir" placeholder="45"></div>
+            <div><label>AW139 air time (min)</label><input type="number" id="tAir" placeholder="45"></div>
           </div>
-          <button type="button" class="calc-btn" onclick="calcDistance()">📍 Calculate via Google Maps API</button>
-          <div class="hint">Or enter manually. Ground per Google Maps; air via great-circle ÷ 135 mph.</div>
+          <button type="button" class="calc-btn" onclick="calcDistance()">📍 Calculate distance, ground ETA &amp; map</button>
+          <div class="hint">Or enter manually. Ground miles &amp; ambulance ETA via Google Maps; air via great-circle ÷ AW139 cruise (165 kt). A route map appears in the output column.</div>
 
           <label>Bypassed Closer Facility (if any) + Reason</label>
           <textarea id="bypass" placeholder="Mariners Hospital was contacted as a closer alternative; bypassed because patient was accepted at Jackson Memorial (Ryder Trauma Center) for combined trauma/neuro/surgical capability."></textarea>
@@ -1573,6 +1573,12 @@
       <div class="row"><span class="label">Ground:</span><span class="value" id="distGroundVal"></span></div>
       <div class="row"><span class="label">Air:</span><span class="value" id="distAirVal"></span></div>
       <div class="row"><span class="label">Time savings:</span><span class="value" id="distSavings"></span></div>
+    </div>
+
+    <div class="output-card" id="mapCard" style="display:none">
+      <h3>Transport Map <span class="hint" style="font-weight:400">— sending → receiving</span></h3>
+      <iframe id="routeMap" title="Sending to receiving transport route" style="width:100%;height:320px;border:0;border-radius:8px" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+      <div class="hint">Driving route &amp; ground ETA via Google Maps. Air distance and AW139 flight time are computed straight-line (great-circle). If the map is blank, enable the <b>Maps Embed API</b> on your key.</div>
     </div>
 
     <div class="output-card">
@@ -1948,7 +1954,7 @@
 
     <h3>Google Maps API Key (optional)</h3>
     <input type="password" id="googleKey" placeholder="AIza...">
-    <div class="hint">For automatic distance/time lookup. Manual entry works without it.</div>
+    <div class="hint">For distance, ground ETA &amp; the route map. Enable <b>Routes API</b>, <b>Geocoding API</b>, and <b>Maps Embed API</b> on the key. Manual entry works without it.</div>
 
     <h3>Model</h3>
     <select id="modelSelect">
@@ -2761,6 +2767,11 @@ Return plain text only.`;
     return R * c;
   }
 
+  // Leonardo AW139 planning cruise speed. ~165 kt true airspeed (≈ 190 mph / 306 km/h).
+  // Air time is straight-line distance ÷ cruise; airborne, point-to-point (excludes
+  // taxi/climb/approach). Adjust here if your unit uses a different planning number.
+  const AW139_CRUISE_KTS = 165;
+  const MI_PER_NM = 1.15078;
   // ====== Distance via REST APIs (no JS SDK) ======
   // The classic JS SDK DistanceMatrixService can silently hang on newer projects.
   // We use direct HTTPS calls to Geocoding API + Routes API instead. Both support
@@ -2860,10 +2871,12 @@ Return plain text only.`;
       const dest = await geocodeAddress(destination, settings.google);
       lat2 = dest.lat; lng2 = dest.lng;
       const airMi = haversineMiles(lat1, lng1, lat2, lng2);
+      const airNm = airMi / MI_PER_NM;
       $('dAir').value = airMi.toFixed(1);
-      $('tAir').value = Math.round(airMi / 135 * 60); // 135 mph cruise
+      $('tAir').value = Math.round(airNm / AW139_CRUISE_KTS * 60); // AW139 @ 165 kt cruise
 
       updateDistanceCard();
+      updateRouteMap(origin, destination, lat1, lng1, lat2, lng2);
       setStatus('Distances calculated.');
       setTimeout(() => setStatus(''), 2000);
     } catch (err) {
@@ -2885,10 +2898,30 @@ Return plain text only.`;
     const dG = val('dGround'), tG = val('tGround'), dA = val('dAir'), tA = val('tAir');
     if (!dG || !tG || !tA) { $('distanceCard').style.display = 'none'; return; }
     $('distanceCard').style.display = 'block';
-    $('distGroundVal').textContent = `${dG} mi · ${tG} min`;
-    $('distAirVal').textContent = `${dA || '—'} mi · ${tA} min`;
+    $('distGroundVal').textContent = `${dG} mi · ${tG} min by ground`;
+    const nmTxt = dA ? ` (${(parseFloat(dA)/MI_PER_NM).toFixed(0)} nm)` : '';
+    $('distAirVal').textContent = `${dA || '—'} mi${nmTxt} · ${tA} min (AW139 @ ${AW139_CRUISE_KTS} kt)`;
     const savings = parseInt(tG) - parseInt(tA);
     $('distSavings').textContent = savings > 0 ? `${savings} min` : '—';
+  }
+
+  // Embed a Google map of the sending → receiving route (Maps Embed API, free).
+  // Requires the "Maps Embed API" enabled on the same key used for distances.
+  function updateRouteMap(origin, destination, lat1, lng1, lat2, lng2){
+    const card = $('mapCard'), frame = $('routeMap');
+    if (!card || !frame) return;
+    const settings = loadSettings();
+    if (!settings.google || !origin || !destination) { card.style.display = 'none'; return; }
+    // Prefer geocoded coordinates (precise hospital points) over the typed address.
+    const o = (lat1 != null && lng1 != null) ? `${lat1},${lng1}` : origin;
+    const d = (lat2 != null && lng2 != null) ? `${lat2},${lng2}` : destination;
+    const src = 'https://www.google.com/maps/embed/v1/directions'
+      + `?key=${encodeURIComponent(settings.google)}`
+      + `&origin=${encodeURIComponent(o)}`
+      + `&destination=${encodeURIComponent(d)}`
+      + '&mode=driving';
+    frame.src = src;
+    card.style.display = 'block';
   }
 
   ['dGround','tGround','dAir','tAir'].forEach(id => {
@@ -3960,6 +3993,7 @@ ${JSON.stringify(data, null, 2)}`;
     $('templateOut').classList.remove('polished');
     $('complianceList').innerHTML = '';
     $('distanceCard').style.display = 'none';
+    if ($('mapCard')) { $('mapCard').style.display = 'none'; $('routeMap').src = 'about:blank'; }
     dxSelected.length = 0;
     renderDxChips();
     if ($('dxSearch')) $('dxSearch').value = '';
