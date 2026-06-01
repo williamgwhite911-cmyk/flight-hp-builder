@@ -847,8 +847,11 @@
               <input type="text" id="aircraft" placeholder="N123SF or Bell 407">
             </div>
           </div>
-          <label>Flight Crew</label>
-          <input type="text" id="flightCrew" placeholder="e.g., RN: Will White; Medic: Chris Smith">
+          <div class="row-3">
+            <div><label>Flight RN</label><input type="text" id="flightRN" placeholder="Will White, RN"></div>
+            <div><label>Flight Paramedic</label><input type="text" id="flightMedic" placeholder="Chris Smith, FP-C"></div>
+            <div><label>Pilot</label><input type="text" id="pilot" placeholder="J. Rivera"></div>
+          </div>
         </div>
       </details>
     </fieldset>
@@ -3103,7 +3106,14 @@ Return plain text only.`;
       mode,
       statFlight: val('statFlightNum'),
       aircraft: val('aircraft'),
-      crew: val('flightCrew'),
+      crewRN: val('flightRN'),
+      crewMedic: val('flightMedic'),
+      pilot: val('pilot'),
+      crew: [
+        val('flightRN') && 'Flight RN ' + val('flightRN'),
+        val('flightMedic') && 'Flight Paramedic ' + val('flightMedic'),
+        val('pilot') && 'Pilot ' + val('pilot'),
+      ].filter(Boolean).join('; '),
       times: { roomEntry: val('tRoom'), monitorApplied: val('tMonitor') },
       patient: {
         name: val('ptName'),
@@ -4086,6 +4096,48 @@ ${JSON.stringify(data, null, 2)}`;
   }
 
   // ====== Combine everything into one complete narrative ======
+  // Gold-standard format/structure exemplar provided by the crew. Used to guide
+  // the combined-narrative AI output (style only — its content is never reused).
+  const COMBINED_GOLD_EXAMPLE = `Trauma Star 1 was requested by Nursing Supervisor Julie at Lower Keys Medical Center Emergency Department for emergent interfacility transport of a 75-year-old female patient with a confirmed acute-on-chronic right subdural hematoma requiring neurosurgical evaluation and higher level trauma care unavailable at Lower Keys Medical Center.
+
+Flight crew received bedside report from Emergency Physician Dr. Paul Tate and primary nurse Catherine Dehanas, RN. Receiving facility acceptance had been obtained by Dr. Slane Kendall, Neurosurgeon, at HCA Florida Kendall Hospital, the closest Level I Trauma Center with neurosurgical capabilities available to the patient.
+
+According to Lower Keys Medical Center staff, the patient sustained a ground-level fall at approximately 0830 hours while walking from her apartment to the laundry area on the property. The patient reportedly tripped on uneven concrete pavement and fell, striking the left side of her head on the concrete surface. The patient denied loss of consciousness; however, bystanders who witnessed the incident reported a possible brief period of loss of consciousness immediately following the fall.
+
+The patient sustained an approximately 0.5-inch laceration to the left forehead/scalp region requiring suture repair by Dr. Tate. Additional injuries included bilateral knee abrasions that were initially bleeding and subsequently dressed by Lower Keys Medical Center staff. The patient reported daily use of aspirin 81 mg and a history of anemia. She denied any medication allergies. The patient stated she takes three additional medications but was unable to recall their names and did not believe any were anticoagulants.
+
+Review of imaging revealed an acute-on-chronic right subdural hematoma measuring approximately 9 mm in thickness with associated mild mass effect upon the right lateral ventricle and approximately 1 mm right-to-left midline shift. Additional CT findings included left frontal scalp swelling without skull fracture, hydrocephalus, or evidence of acute ischemic stroke. CT cervical spine was negative for acute traumatic injury.
+
+Flight crew assessment found the patient alert and oriented to person, place, and time with a Glasgow Coma Scale score of 15. The patient was speaking clearly and answering questions appropriately. Pupils were approximately 3 mm, equal, round, and reactive bilaterally. Airway was patent. Trachea was midline without jugular venous distention. Chest examination revealed no contusions, deformities, or paradoxical movement. Respirations were non-labored with equal chest rise and fall. Lung sounds were clear to auscultation bilaterally. Oxygen saturation remained 98-99% on room air throughout transport.
+
+Abdominal examination revealed a soft, non-distended abdomen without tenderness. Pelvis was stable. Back examination revealed no tenderness, deformities, or abnormalities. The patient demonstrated full active range of motion of all extremities with no focal neurological deficits identified. No neck pain or back pain was reported.
+
+Vital signs remained stable throughout the patient's emergency department course and transport. Blood pressure was 141/80 mmHg, heart rate 95 beats per minute, respiratory rate 15 breaths per minute, temperature 36.7 degrees Celsius (98.5 degrees Fahrenheit), oxygen saturation 99% on room air, and pain score 2/10.
+
+A 20-gauge saline lock IV previously established in the left antecubital fossa by Lower Keys Medical Center staff was assessed by the flight crew and confirmed patent. The patient was briefed regarding the need for emergent transfer to HCA Florida Kendall Hospital for neurosurgical evaluation and potential intervention not available at Lower Keys Medical Center. The patient verbalized understanding of the treatment plan.
+
+The patient's belongings and complete medical record packet were gathered and transported with the patient. Flight crew, emergency physician, and hospital security personnel utilized a patient transfer device ("People Mover") to safely transfer the patient onto the flight stretcher while maintaining spinal alignment and minimizing unnecessary movement. Due to the patient's intracranial hemorrhage, the head of the stretcher was elevated approximately 30 degrees to assist with venous drainage and minimize the potential for increased intracranial pressure.
+
+Consultation with the accepting neurosurgeon confirmed no indication for hypertonic saline, osmotic therapy, or additional pharmacologic intervention prior to arrival. The neurosurgical team preferred direct evaluation upon arrival at the receiving facility.
+
+The patient was escorted to the helicopter for a hot-load procedure. The accompanying emergency department nurse and security officer received a complete safety briefing regarding helicopter operations. Flight crew maintained positive control and supervision of all hospital personnel throughout the loading process. Hearing protection was provided to the patient, and she was instructed to notify the crew of any pain, nausea, headache, visual changes, weakness, confusion, or other neurological symptoms by raising her hand during flight.
+
+Once loaded into the aircraft, the patient was secured utilizing all approved stretcher restraint systems. Continuous cardiac monitoring and pulse oximetry were initiated. Blood glucose was obtained and measured 109 mg/dL. Cabin temperature was maintained at approximately 29 degrees Celsius. The patient maintained adequate oxygenation on room air throughout transport.
+
+During transport, serial neurological examinations were performed with particular attention to changes in level of consciousness, pupillary response, motor function, speech, and signs of increasing intracranial pressure. The patient remained neurologically intact throughout the flight with no deterioration in mental status, no seizure activity, no vomiting, and no focal neurological deficits observed.
+
+Transport by rotor-wing aircraft was medically necessary and justified due to the patient's age, intracranial hemorrhage, aspirin use, documented midline shift, and need for timely neurosurgical evaluation. Although neurologically intact at the time of transport, patients with acute-on-chronic subdural hematomas may deteriorate rapidly due to expansion of the hemorrhage, increasing cerebral edema, progressive mass effect, seizure activity, declining level of consciousness, or worsening midline shift. Lower Keys Medical Center does not possess neurosurgical capabilities necessary for definitive management.
+
+Ground transport distance from Lower Keys Medical Center to HCA Florida Kendall Hospital is approximately 156 miles with an estimated transport time of 170-190 minutes (approximately 2 hours 50 minutes to 3 hours 10 minutes). Rotor-wing transport reduced transport time to approximately 37 minutes, allowing significantly faster access to neurosurgical consultation, repeat neuroimaging, operative intervention if required, and advanced neurocritical care resources. Air transport also allowed continuous critical care monitoring during a period of potential neurological instability.
+
+Radio report was provided to HCA Florida Kendall Hospital approximately 10 minutes prior to arrival. Receiving staff acknowledged the report and advised they were prepared for the patient's arrival. No additional orders were received.
+
+Upon arrival, the patient was hot-unloaded from the aircraft and met by the trauma team on the helipad. The patient was transported directly to the trauma room. Transfer from the flight stretcher to the hospital stretcher was completed without incident while maintaining patient safety and head elevation precautions.
+
+A complete bedside handoff report was provided to Dr. Slane Kendall, MD, Neurosurgery, and Alexis Rangel, RN. All medical records, imaging reports, transfer documentation, and patient belongings were transferred to receiving personnel. The receiving team voiced no questions or concerns at the completion of the handoff.
+
+Patient was left in stable condition with the HCA Florida Kendall Hospital trauma and neurosurgical teams for continued evaluation and management.`;
+
   async function generateCombined(){
     const settings = loadSettings();
     if (!settings.anthropic) {
@@ -4100,9 +4152,39 @@ ${JSON.stringify(data, null, 2)}`;
     btn.innerHTML = '<span class="spinner"></span>Combining…';
     setStatus('<span class="spinner"></span>Combining all information into one narrative…');
     try {
-      const prompt = `You are a critical-care flight crew documentarian. Combine ALL of the information gathered below into ONE complete, comprehensive narrative written as flowing prose (a single cohesive paragraph if reasonable; if the volume of detail makes one paragraph unreadable, use as few paragraphs as possible). Integrate everything that has a value: the flight unit and crew, who requested the transport and from where, the patient demographics, the diagnosis and time-sensitivity, the history of present illness and pertinent past history, allergies, vital signs and physical assessment, labs / ABG-VBG / chemistry / imaging, IV/IO access, medications and drips, RSI and sedation, ventilator settings (Hamilton T2), ground and air distances with flight times, the mode-of-transport justification, and the critical-care transport operational details (hot load, en route care, radio communication, hot offload, and patient turnover).
+      const prompt = `You are a critical-care flight crew documentarian. Combine ALL of the information gathered below into ONE complete, comprehensive transport narrative.
 
-Rules: Past tense, clinical and factual. Do NOT invent any value that is not provided; simply omit anything missing. Do not use bullet points, headings, or section labels — produce continuous narrative prose only. Use the flight unit value (e.g., "Trauma Star 1") verbatim. Return ONLY the narrative text — no markdown, no code fences, no JSON.
+Follow the FORMAT, structure, paragraph flow, tone, and level of clinical detail of the GOLD-STANDARD EXAMPLE below. Organize the narrative in the same logical order it uses, devoting a paragraph (or merged paragraphs) to each as data allows:
+1) opening line — flight unit was requested by [requester] at [sending facility] for [emergent/urgent] [interfacility/scene] transport of a [age]-year-old [sex] with [diagnosis] requiring [capability not available at the sending facility];
+2) bedside report received from [sending physician] and [sending RN]; receiving acceptance obtained by [accepting MD, specialty] at [receiving facility] (note trauma/specialty level if known);
+3) history / mechanism of injury or illness per sending staff;
+4) injuries, home medications, anticoagulant/antiplatelet use, allergies;
+5) imaging review;
+6) flight-crew physical assessment (neuro/GCS, pupils, airway, HEENT, chest, lungs, SpO2);
+7) abdomen, pelvis, back, extremities, neurological deficits;
+8) vital signs;
+9) IV/IO access, patient briefed and verbalized understanding;
+10) belongings and records, transfer device, head-of-bed / positioning precautions;
+11) any consultation with the accepting physician regarding pre-arrival interventions;
+12) loading — hot load (rotors turning) vs cold load — with safety briefing, hearing protection, and symptom instructions;
+13) securing in the aircraft, monitoring initiated, blood glucose, cabin temperature;
+14) en route serial assessments and the patient's course/response;
+15) medical-necessity justification for air transport;
+16) ground vs air distance and time comparison;
+17) radio report ~10 minutes prior to arrival and acknowledgment;
+18) hot unload vs cold offload, met by team, transport to trauma room / ICU;
+19) bedside handoff to [receiving MD] and [receiving RN], records/belongings transferred;
+20) disposition — patient left in stable condition with the receiving team.
+
+CRITICAL RULES:
+- Use ONLY the actual data provided below. The example is a STYLE and STRUCTURE guide ONLY — do NOT copy any of its clinical facts, names, diagnoses, numbers, or findings.
+- Omit any item, sentence, or whole paragraph for which no data is provided. Never invent values, names, times, vitals, or findings.
+- Past tense, professional clinical prose. Reference crew by role using the provided names (Flight RN, Flight Paramedic, Pilot). Use the flight unit value verbatim (e.g., "Trauma Star 1").
+- Return ONLY the narrative text — no headings, no bullet points, no markdown, no code fences, no JSON.
+
+===== GOLD-STANDARD EXAMPLE (format/structure reference only — do not reuse its content) =====
+${COMBINED_GOLD_EXAMPLE}
+===== END EXAMPLE =====
 
 CREW TRANSPORT NOTES:
 ${JSON.stringify(cct, null, 2)}
@@ -4878,7 +4960,10 @@ ${transcript}`;
     flightMeta.push(['Call type', d.mode === 'ift' ? 'Interfacility (IFT)' : 'Scene']);
     if (d.statFlight) flightMeta.push(['Flight number', d.statFlight]);
     if (d.aircraft) flightMeta.push(['Aircraft', d.aircraft]);
-    if (d.crew) flightMeta.push(['Flight crew', d.crew]);
+    if (d.crewRN) flightMeta.push(['Flight RN', d.crewRN]);
+    if (d.crewMedic) flightMeta.push(['Flight Paramedic', d.crewMedic]);
+    if (d.pilot) flightMeta.push(['Pilot', d.pilot]);
+    if (!d.crewRN && !d.crewMedic && !d.pilot && d.crew) flightMeta.push(['Flight crew', d.crew]);
     html += '<div class="meta">';
     flightMeta.forEach(([k, v]) => { html += `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`; });
     html += '</div>';
