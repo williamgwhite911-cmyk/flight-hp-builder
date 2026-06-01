@@ -1597,6 +1597,8 @@
             </optgroup>
           </select>
           <textarea id="airReason" rows="3" placeholder="Pick from the dropdown above or type freely. Multiple reasons appear as bullets."></textarea>
+          <button type="button" class="calc-btn" onclick="generateAirJustification(this)" id="airJustifyBtn">🤖 AI: Detailed air-vs-ground justification (from diagnosis)</button>
+          <div class="hint">Builds a thorough, insurance-grade rationale for rotor-wing over ground using the diagnosis, time-sensitivity, capabilities, and distances entered above.</div>
           <button type="button" class="add-btn" onclick="$('airReason').value=''" style="background:#fee2e2;color:#991b1b;border-color:#fecaca">Clear reasons</button>
         </div>
       </details>
@@ -2939,6 +2941,57 @@ Return plain text only.`;
     }
     txt.value = existing ? existing + '\n' + line : line;
     sel.selectedIndex = 0;
+  }
+
+  // AI: detailed, diagnosis-specific air-vs-ground justification.
+  async function generateAirJustification(btn){
+    const settings = loadSettings();
+    if (!settings.anthropic) {
+      setStatus('Anthropic API key required. Open Settings to add one.', true);
+      openSettings();
+      return;
+    }
+    const d = gatherAllData();
+    if (!d.diagnosis && !(d.diagnosisChips && d.diagnosisChips.length) && !d.cc) {
+      setStatus('Enter a diagnosis (or chief complaint) first so the justification can be specific.', true);
+      return;
+    }
+    const old = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Generating…'; }
+    setStatus('<span class="spinner"></span>Generating air-vs-ground justification…');
+    try {
+      const prompt = `You are writing the "medical necessity — air versus ground" justification for an air-medical (rotor-wing) transport, to support insurance/payer review and the patient chart. Using the data below, write a thorough, specific rationale (2-4 short paragraphs OR 4-8 bullet points) explaining why ROTOR-WING air transport was medically necessary and ground transport was inappropriate FOR THIS PATIENT'S diagnosis and condition.
+
+Ground the argument in the actual diagnosis and clinical picture. Address, where the data supports it: (1) the time-sensitive nature of the diagnosis and the specific risk of deterioration during a longer ground transport (name the concrete complications that could occur en route); (2) the level of care / capabilities required that exceed ground ALS scope (critical-care monitoring, drips/titration, ventilator, specialty team); (3) the time differential between ground and air using the provided distances/times; (4) the capabilities at the receiving facility that the patient needs and the sending facility lacks; (5) any closer-facility bypass rationale. Be concrete and clinical; do NOT invent distances, times, or facts not provided. Use professional payer-facing language. Return ONLY the justification text (no preamble, no headings, no markdown fences).
+
+DATA:
+${JSON.stringify({
+  diagnosis: d.diagnosis,
+  diagnosisChips: d.diagnosisChips,
+  timeFlags: d.timeFlags,
+  acuity: d.acuity,
+  cc: d.cc,
+  pmh: d.pmh,
+  vitals: d.vitals,
+  vent: d.vent,
+  drips: d.drips,
+  servicesUnavail: d.servicesUnavail,
+  sending: d.sending,
+  receiving: d.receiving,
+  distance: d.distance,
+  bypass: d.bypass,
+}, null, 2)}`;
+      let text = await callAnthropic(prompt);
+      text = text.replace(/^```(?:json|text)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const existing = $('airReason').value.trim();
+      $('airReason').value = existing ? existing + '\n\n' + text : text;
+      setStatus('Air-vs-ground justification added. Review and edit as needed.');
+      setTimeout(() => setStatus(''), 2500);
+    } catch (err) {
+      setStatus('Justification failed: ' + (err.message || err), true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = old; }
+    }
   }
 
   // ====== Distance calculation ======
