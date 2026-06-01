@@ -1705,6 +1705,13 @@
       <div class="hint" style="margin-bottom:8px">Uses diagnosis chips, vitals, ABG/VBG, chem, labs, imaging, vent settings. Reference only — not in H&P narrative.</div>
       <div id="clinicalInterp" class="med-summary"><span class="empty">Click the button above to get an AI clinical interpretation.</span></div>
     </div>
+
+    <div class="output-card">
+      <h3>Complete Combined Narrative <button class="copy-narrative" style="font-size:11px;padding:6px 10px" onclick="copyText('combinedOut', this)" type="button">Copy</button></h3>
+      <button class="generate-all" style="width:100%;margin-bottom:8px;background:#0c4a6e" onclick="generateCombined()" id="combinedBtn" type="button">📋 Combine ALL Info Into One Complete Paragraph</button>
+      <div class="hint" style="margin-bottom:8px">Pulls every field you've filled in — demographics, transport, diagnosis, history, vitals, labs, vent, meds, distances, and the critical-care transport details — into one complete flowing narrative.</div>
+      <div class="narrative" id="combinedOut" contenteditable="true">Fill in the chart above, then click to combine everything into one complete paragraph.</div>
+    </div>
   </div>
 </div>
 
@@ -4078,6 +4085,45 @@ ${JSON.stringify(data, null, 2)}`;
     }
   }
 
+  // ====== Combine everything into one complete narrative ======
+  async function generateCombined(){
+    const settings = loadSettings();
+    if (!settings.anthropic) {
+      setStatus('Anthropic API key required. Open Settings to add one.', true);
+      openSettings();
+      return;
+    }
+    const data = gatherAllData();
+    const cct = gatherCCT();
+    const btn = $('combinedBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Combining…';
+    setStatus('<span class="spinner"></span>Combining all information into one narrative…');
+    try {
+      const prompt = `You are a critical-care flight crew documentarian. Combine ALL of the information gathered below into ONE complete, comprehensive narrative written as flowing prose (a single cohesive paragraph if reasonable; if the volume of detail makes one paragraph unreadable, use as few paragraphs as possible). Integrate everything that has a value: the flight unit and crew, who requested the transport and from where, the patient demographics, the diagnosis and time-sensitivity, the history of present illness and pertinent past history, allergies, vital signs and physical assessment, labs / ABG-VBG / chemistry / imaging, IV/IO access, medications and drips, RSI and sedation, ventilator settings (Hamilton T2), ground and air distances with flight times, the mode-of-transport justification, and the critical-care transport operational details (hot load, en route care, radio communication, hot offload, and patient turnover).
+
+Rules: Past tense, clinical and factual. Do NOT invent any value that is not provided; simply omit anything missing. Do not use bullet points, headings, or section labels — produce continuous narrative prose only. Use the flight unit value (e.g., "Trauma Star 1") verbatim. Return ONLY the narrative text — no markdown, no code fences, no JSON.
+
+CREW TRANSPORT NOTES:
+${JSON.stringify(cct, null, 2)}
+
+CHART DATA:
+${JSON.stringify(data, null, 2)}`;
+      let response = await callAnthropic(prompt);
+      response = response.replace(/^```(?:json|text)?\s*/i, '').replace(/```\s*$/, '').trim();
+      $('combinedOut').textContent = response;
+      $('combinedOut').classList.add('polished');
+      btn.disabled = false;
+      btn.innerHTML = '📋 Re-combine Into One Paragraph';
+      setStatus('Combined narrative generated.');
+      setTimeout(() => setStatus(''), 2000);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '📋 Combine ALL Info Into One Complete Paragraph';
+      setStatus('Combine failed: ' + (err.message || err), true);
+    }
+  }
+
   // ====== Medication Summary (Phase 3b) ======
   // Cached AI-extracted medications array — reused by printReport().
   let lastMedications = [];
@@ -4249,6 +4295,10 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('cctOut')) {
       $('cctOut').textContent = 'Fill in the chart and the Critical Care Air Transport fields, then click Generate to build the paragraph-format transport report (hot load, en route care, radio report, hot offload, turnover).';
       $('cctOut').classList.remove('polished');
+    }
+    if ($('combinedOut')) {
+      $('combinedOut').textContent = 'Fill in the chart above, then click to combine everything into one complete paragraph.';
+      $('combinedOut').classList.remove('polished');
     }
     $('complianceList').innerHTML = '';
     $('distanceCard').style.display = 'none';
