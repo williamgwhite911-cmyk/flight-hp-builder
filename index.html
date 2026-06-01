@@ -815,7 +815,7 @@
           </div>
           <div class="hint">Upload the full sending-facility packet — face sheet, H&P, MAR, labs, imaging reports, etc. Mixed PDFs and photos are OK. AI scans all pages, populates every relevant section of the form, and produces a clinician-only summary. The summary is NOT printed on the chart.</div>
           <label>Select files (Cmd/Shift-click for multiple)</label>
-          <input type="file" id="paperworkFiles" accept=".pdf,image/*" capture="environment" multiple onchange="onPaperworkFilesSelected(event)">
+          <input type="file" id="paperworkFiles" accept=".pdf,image/*" multiple onchange="onPaperworkFilesSelected(event)">
           <div id="paperworkFileList" class="hint"></div>
           <button class="add-btn" type="button" style="background:#ede9fe;color:#5b21b6;border-color:#c4b5fd" onclick="processHospitalPaperwork()">✨ Extract Everything & Fill the Form</button>
           <div id="paperworkStatus" style="font-size:12px;margin-top:6px;color:#64748b"></div>
@@ -891,7 +891,7 @@
           </div>
 
           <label style="margin-top:10px">Driver's License Photo (stored on device; embeds in printed report)</label>
-          <input type="file" id="ptLicenseFile" accept="image/*" capture="environment" multiple onchange="handleLicensePhoto(event)">
+          <input type="file" id="ptLicenseFile" accept="image/*" multiple onchange="handleLicensePhoto(event)">
           <div id="licensePreview"></div>
           <div id="licenseOcrBlock" style="display:none;margin-top:6px">
             <button type="button" class="calc-btn" onclick="extractLicenseData()">🤖 Auto-fill from license (pilot — sends photo to AI)</button>
@@ -899,7 +899,7 @@
           <div class="hint">Photo stays on device unless you click the AI extract button (pilot only).</div>
 
           <label style="margin-top:10px">Face Sheet / Wristband / MRN Sticker Photo (for MRN auto-fill)</label>
-          <input type="file" id="ptFaceSheetFile" accept="image/*" capture="environment" multiple onchange="handleFaceSheetPhoto(event)">
+          <input type="file" id="ptFaceSheetFile" accept="image/*" multiple onchange="handleFaceSheetPhoto(event)">
           <div id="faceSheetPreview"></div>
           <div id="faceSheetOcrBlock" style="display:none;margin-top:6px">
             <button type="button" class="calc-btn" onclick="extractFaceSheetData()">🤖 Auto-fill MRN + demographics (pilot — sends photo to AI)</button>
@@ -1160,7 +1160,7 @@
 
           <div class="ocr-block" id="ocrBlockHistory" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrHistoryFile">📷 Face sheet PMH photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrHistoryFile" accept="image/*" capture="environment" multiple onchange="handleHistoryPhoto(event)">
+            <input type="file" id="ocrHistoryFile" accept="image/*" multiple onchange="handleHistoryPhoto(event)">
             <div id="ocrHistoryStatus" class="hint"></div>
           </div>
         </div>
@@ -1177,7 +1177,7 @@
 
           <div class="ocr-block" id="ocrBlockRad" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrRadFile">📷 Radiology image(s) (pilot) — cover patient identifiers first; multi-select allowed</label>
-            <input type="file" id="ocrRadFile" accept="image/*" capture="environment" multiple onchange="handleRadPhotos(event)">
+            <input type="file" id="ocrRadFile" accept="image/*" multiple onchange="handleRadPhotos(event)">
             <div id="ocrRadStatus" class="hint"></div>
           </div>
         </div>
@@ -1200,7 +1200,7 @@
 
           <div class="ocr-block" id="ocrBlockLabs" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrLabsFile">📷 Lab result photo(s) (pilot) — cover patient identifiers first; multi-select allowed</label>
-            <input type="file" id="ocrLabsFile" accept="image/*" capture="environment" multiple onchange="handleLabPhotos(event)">
+            <input type="file" id="ocrLabsFile" accept="image/*" multiple onchange="handleLabPhotos(event)">
             <div id="ocrLabsStatus" class="hint"></div>
           </div>
         </div>
@@ -1321,7 +1321,7 @@
           <button class="add-btn" type="button" onclick="addIvLine()">+ Add IV line</button>
           <div class="ocr-block" id="ocrBlockIv" style="display:none;margin-top:8px">
             <label class="ocr-label" for="ocrIvFile">📷 Pump screen photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrIvFile" accept="image/*" capture="environment" multiple onchange="handlePumpPhoto(event)">
+            <input type="file" id="ocrIvFile" accept="image/*" multiple onchange="handlePumpPhoto(event)">
             <div id="ocrIvStatus" class="hint"></div>
           </div>
         </div>
@@ -1343,7 +1343,7 @@
 
           <div class="ocr-block" id="ocrBlockMeds" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrMedsFile">📷 Face sheet home medications photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrMedsFile" accept="image/*" capture="environment" multiple onchange="handleMedsPhoto(event)">
+            <input type="file" id="ocrMedsFile" accept="image/*" multiple onchange="handleMedsPhoto(event)">
             <div id="ocrMedsStatus" class="hint"></div>
           </div>
         </div>
@@ -1433,7 +1433,7 @@
           </div>
           <div class="ocr-block" id="ocrBlockVent" style="display:none;margin-top:8px">
             <label class="ocr-label" for="ocrVentFile">📷 Vent screen photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrVentFile" accept="image/*" capture="environment" multiple onchange="handleVentPhoto(event)">
+            <input type="file" id="ocrVentFile" accept="image/*" multiple onchange="handleVentPhoto(event)">
             <div id="ocrVentStatus" class="hint"></div>
           </div>
         </div>
