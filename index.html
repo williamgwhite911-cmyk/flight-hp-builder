@@ -1666,6 +1666,25 @@
       </details>
     </fieldset>
 
+    <fieldset>
+      <details>
+        <summary>In-Flight Monitoring (serial monitor / vent / pump photos)</summary>
+        <div class="fieldset-body">
+          <div class="hint">During flight, capture up to 25 photos of the monitor, ventilator, and IV pump as you make adjustments. AI reads each into a time-stamped entry added to the chart and report. <b>Cover patient identifiers first.</b></div>
+          <input type="file" id="inflightFiles" accept="image/*" multiple onchange="onInflightPhotos(event)" style="display:none">
+          <div class="photo-src-btns" style="margin-top:8px">
+            <button type="button" class="calc-btn" onclick="pickPhoto('inflightFiles','camera')">📷 Take Photo</button>
+            <button type="button" class="calc-btn" onclick="pickPhoto('inflightFiles','library')">🖼️ Add from Library</button>
+          </div>
+          <div id="inflightCount" class="hint" style="margin-top:6px"></div>
+          <div id="inflightThumbs" class="inflight-thumbs"></div>
+          <button type="button" class="generate-all" style="width:100%;margin-top:8px" id="inflightBtn" onclick="extractInflight()">🤖 Extract readings &amp; add to chart</button>
+          <div id="inflightStatus" class="hint"></div>
+          <div id="inflightLog" class="med-summary"></div>
+        </div>
+      </details>
+    </fieldset>
+
     <button class="add-btn" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;margin-top:14px" onclick="resetForm()" type="button">Reset all fields</button>
   </div>
 
@@ -3248,6 +3267,7 @@ ${JSON.stringify({
       airReason: val('airReason'),
       belongings: val('belongings'),
       briefed: val('briefed'),
+      inflight: inflightLogData.slice(),
     };
   }
 
@@ -4116,6 +4136,95 @@ ${JSON.stringify(data, null, 2)}`;
     }
   }
 
+  // ====== In-Flight Monitoring (serial monitor / vent / pump photos) ======
+  const INFLIGHT_MAX = 25;
+  let inflightPhotoDataUrls = [];
+  let inflightLogData = []; // [{time, device, summary, values}]
+
+  function onInflightPhotos(event){
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    let remaining = files.length;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        if (inflightPhotoDataUrls.length < INFLIGHT_MAX) inflightPhotoDataUrls.push(e.target.result);
+        if (--remaining === 0) renderInflightThumbs();
+      };
+      reader.onerror = () => { if (--remaining === 0) renderInflightThumbs(); };
+      reader.readAsDataURL(file);
+    });
+    event.target.value = '';
+  }
+  function removeInflightAt(idx){ inflightPhotoDataUrls.splice(idx, 1); renderInflightThumbs(); }
+  function clearInflightPhotos(){ inflightPhotoDataUrls = []; renderInflightThumbs(); }
+  function renderInflightThumbs(){
+    const wrap = $('inflightThumbs'), count = $('inflightCount');
+    const n = inflightPhotoDataUrls.length;
+    if (count) count.textContent = n ? `${n} of ${INFLIGHT_MAX} photo${n===1?'':'s'} queued` + (n >= INFLIGHT_MAX ? ' (max reached)' : '') : '';
+    if (!wrap) return;
+    if (!n) { wrap.innerHTML = ''; return; }
+    const thumbs = inflightPhotoDataUrls.map((url, idx) => `
+      <div class="photo-thumb">
+        <img src="${url}" alt="In-flight ${idx + 1}">
+        <button type="button" class="photo-thumb-remove" onclick="removeInflightAt(${idx})" title="Remove">×</button>
+      </div>`).join('');
+    wrap.innerHTML = `<div class="photo-thumbs">${thumbs}</div>
+      <button type="button" class="clear-btn" onclick="clearInflightPhotos()" style="margin-top:4px">Clear all (${n})</button>`;
+  }
+
+  async function extractInflight(){
+    if (!inflightPhotoDataUrls.length) { alert('Add at least one in-flight photo first.'); return; }
+    if (!confirmPhi('in-flight monitor/ventilator/IV pump')) return;
+    const btn = $('inflightBtn'), status = $('inflightStatus');
+    const n = inflightPhotoDataUrls.length;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Reading…';
+    status.innerHTML = `<span class="spinner"></span> Reading ${n} in-flight photo${n===1?'':'s'}…`;
+    status.style.color = '#5b21b6';
+    try {
+      const files = await dataUrlsToFiles(inflightPhotoDataUrls, 'inflight');
+      const prompt = `These are serial IN-FLIGHT photos taken during a critical-care air transport — each shows a patient MONITOR, a VENTILATOR, or an IV/SYRINGE PUMP. For EACH photo, extract one time-stamped reading. Return ONLY a JSON array (one object per photo, in order):
+[ { "time": "HH:MM or empty", "device": "monitor | ventilator | iv_pump | other", "summary": "one concise clinical line of the key values", "values": { } } ]
+- "time": the clock time shown on the device if visible, else empty.
+- For a MONITOR: put HR, BP/NIBP, SpO2, RR, EtCO2, temp, rhythm into both "summary" and "values".
+- For a VENTILATOR: mode, FiO2, Vt, rate, PEEP, PS/Pinsp, Ppeak, exhaled MinVol.
+- For an IV/SYRINGE PUMP: drug name, concentration, rate (mL/hr and/or mcg/kg/min or units), volume infused (VTBI/remaining).
+- Use only what is visible; omit unreadable fields; do not invent values.
+Return ONLY the JSON array.`;
+      let text = await callClaudeVisionMulti(prompt, files);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      let arr = JSON.parse(text);
+      if (!Array.isArray(arr)) arr = [arr];
+      // append to existing log (so multiple batches accumulate)
+      inflightLogData = inflightLogData.concat(arr.filter(e => e && (e.summary || (e.values && Object.keys(e.values).length))));
+      inflightLogData.sort((a,b) => String(a.time||'').localeCompare(String(b.time||'')));
+      renderInflightLog();
+      status.innerHTML = `✓ Added ${arr.length} reading${arr.length===1?'':'s'} to the chart. Review for accuracy.`;
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      btn.disabled = false; btn.innerHTML = '🤖 Extract readings & add to chart';
+    }
+  }
+  const DEVICE_LABEL = { monitor:'Monitor', ventilator:'Ventilator', iv_pump:'IV Pump', other:'Device' };
+  function renderInflightLog(){
+    const box = $('inflightLog');
+    if (!box) return;
+    if (!inflightLogData.length) { box.innerHTML = ''; return; }
+    const rows = inflightLogData.map((e, i) => {
+      const time = e.time ? `<b>${escapeHtml(e.time)}</b>` : '—';
+      const dev = escapeHtml(DEVICE_LABEL[e.device] || e.device || 'Device');
+      return `<tr><td>${time}</td><td>${dev}</td><td>${escapeHtml(e.summary || '')}</td>
+        <td><button type="button" class="clear-btn" onclick="removeInflightLogAt(${i})" title="Remove">×</button></td></tr>`;
+    }).join('');
+    box.innerHTML = `<table><thead><tr><th>Time</th><th>Device</th><th>Reading</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <button type="button" class="clear-btn" onclick="clearInflightLog()" style="margin-top:6px">Clear all readings (${inflightLogData.length})</button>`;
+  }
+  function removeInflightLogAt(i){ inflightLogData.splice(i,1); renderInflightLog(); }
+  function clearInflightLog(){ inflightLogData = []; renderInflightLog(); }
+
   // ====== Critical Care Air Transport report ======
   function gatherCCT(){
     return {
@@ -4488,6 +4597,10 @@ ${JSON.stringify(data, null, 2)}`;
     renderLicensePreview();
     faceSheetPhotoDataUrls = [];
     renderFaceSheetPreview();
+    inflightPhotoDataUrls = []; inflightLogData = [];
+    if ($('inflightThumbs')) renderInflightThumbs();
+    if ($('inflightLog')) renderInflightLog();
+    if ($('inflightStatus')) $('inflightStatus').textContent = '';
     if ($('allergyList')) $('allergyList').innerHTML = '';
     const algHas = document.querySelector('input[name=allergyStatus][value=has]');
     if (algHas) { algHas.checked = true; algHas.dispatchEvent(new Event('change')); }
@@ -5343,6 +5456,17 @@ ${transcript}`;
         if (parts.length) html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
         if (mon.length) html += `<p><b>Measured:</b> ${escapeHtml(mon.join(' · '))}</p>`;
       }
+    }
+
+    // In-flight serial monitoring (from photos)
+    if (Array.isArray(d.inflight) && d.inflight.length) {
+      html += '<h2>In-Flight Serial Monitoring</h2>';
+      html += '<table><thead><tr><th>Time</th><th>Device</th><th>Reading</th></tr></thead><tbody>';
+      d.inflight.forEach(e => {
+        const dev = ({monitor:'Monitor',ventilator:'Ventilator',iv_pump:'IV Pump',other:'Device'})[e.device] || e.device || 'Device';
+        html += `<tr><td>${escapeHtml(e.time || '—')}</td><td>${escapeHtml(dev)}</td><td>${escapeHtml(e.summary || '')}</td></tr>`;
+      });
+      html += '</tbody></table>';
     }
 
     // Mode justification
