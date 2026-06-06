@@ -3785,7 +3785,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
       },
       body: JSON.stringify({
         model: settings.model,
-        max_tokens: 2048,
+        max_tokens: 8192,
         messages: [{ role: 'user', content: [...images, { type: 'text', text: prompt }] }],
       }),
     });
@@ -4056,15 +4056,41 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     const n = files.length;
     status.innerHTML = `<span class="spinner"></span> Extracting lab values from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
-    const prompt = `Examine the lab result photo(s) and extract every numeric result visible. Return ONLY a JSON object:
-{ "results": [ { "name": "", "value": "", "unit": "", "flag": "H|L|critical|normal|", "ref": "", "time": "HH:MM" } ] }
-- "name": test name (e.g., "Hemoglobin", "Sodium", "Lactate", "WBC")
-- "value": numeric value as shown
-- "unit": units as shown (e.g., "mg/dL", "mmol/L", "K/uL")
-- "flag": "H" if marked high, "L" if low, "critical" if marked critical, "normal" if explicitly within range, otherwise ""
-- "ref": reference range if shown
-- "time": time of draw if shown
-Omit fields you cannot read. Do not invent values. Return ONLY the JSON object, no markdown.`;
+    const prompt = `Examine the lab result photo(s) and extract EVERY numeric result visible — be EXHAUSTIVE. Walk through each panel below and include every value present. Do NOT stop after a few labs; capture the complete panel.
+
+Return ONLY a JSON object:
+{ "results": [ { "panel": "", "name": "", "value": "", "unit": "", "flag": "H|L|critical|normal|", "ref": "", "time": "HH:MM" } ] }
+
+Target panels (extract every member you can see):
+
+CBC: WBC, RBC, Hemoglobin (Hgb), Hematocrit (Hct), Platelets (Plt), MCV, MCH, MCHC, RDW, MPV. Differential if shown: Neutrophils (Abs + %), Lymphocytes (Abs + %), Monocytes, Eosinophils, Basophils, Bands.
+
+BMP / Basic Metabolic Panel: Sodium (Na), Potassium (K), Chloride (Cl), CO2/Bicarbonate (HCO3), BUN, Creatinine (Cr), Glucose, Calcium (Ca), Anion Gap, eGFR.
+
+CMP / Comprehensive Metabolic Panel: everything in BMP plus Total Protein, Albumin, Globulin, AST, ALT, Alkaline Phosphatase (Alk Phos), Total Bilirubin (T Bili), Direct Bilirubin if shown.
+
+Liver Panel / Hepatic Function: AST (SGOT), ALT (SGPT), Alk Phos, Total Bilirubin, Direct/Indirect Bilirubin, Total Protein, Albumin, GGT if shown.
+
+Renal Panel: BUN, Creatinine, eGFR, BUN/Cr ratio, Sodium, Potassium, Chloride, CO2, Glucose, Calcium, Phosphorus, Magnesium if shown.
+
+Cardiac: Troponin I or T (high-sensitivity if labeled), CK, CK-MB, BNP / NT-proBNP, Myoglobin, D-dimer.
+
+Coags: PT, INR, PTT/aPTT, Fibrinogen, D-dimer.
+
+ABG / VBG: pH, pCO2, pO2, HCO3, Base Excess, Lactate, FiO2, SaO2/SvO2, Methemoglobin, Carboxyhemoglobin.
+
+Other common labs: Lactate, Magnesium, Phosphorus, Procalcitonin, CRP, ESR, TSH, Free T4, HbA1c, Lipase, Amylase, Ammonia, Vitamin levels, Drug levels, Urine studies, Cultures (qualitative only).
+
+Per-result rules:
+- "panel": one of "CBC" | "BMP" | "CMP" | "Liver" | "Renal" | "Cardiac" | "Coags" | "ABG" | "VBG" | "Other" — pick the best fit.
+- "name": exact test name as it appears on the report (use the abbreviation if that's how it's shown).
+- "value": numeric value as shown. Preserve decimal places.
+- "unit": units as shown (e.g., "mg/dL", "mmol/L", "K/uL", "%").
+- "flag": "H" if marked high, "L" if low, "critical" if marked critical/panic, "normal" if explicitly within range, otherwise "" (leave blank).
+- "ref": reference range if shown.
+- "time": time of draw if shown.
+
+CRITICAL: extract EVERY value present in the photo(s) — do not summarize, do not skip "normal" values, do not stop at five or ten labs. If a panel has 20 results listed, return all 20. Do not invent values. Return ONLY the JSON object, no markdown.`;
     try {
       let text = await callClaudeVisionMulti(prompt, files);
       text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
