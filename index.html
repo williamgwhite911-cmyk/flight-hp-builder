@@ -502,6 +502,43 @@
     .lab-row { grid-template-columns: 1.2fr 1fr 0.8fr 0.6fr 28px; font-size: 12px; }
   }
 
+  /* Vital signs trend rows */
+  .vt-row {
+    display: grid;
+    grid-template-columns: 78px 1fr 50px 46px 56px 56px 56px 1.4fr 32px;
+    gap: 4px;
+    margin-bottom: 4px;
+    align-items: center;
+  }
+  .vt-row input {
+    padding: 6px 6px;
+    font-size: 13px;
+    border-radius: 6px;
+    min-width: 0;
+  }
+  .vt-row .remove-btn { height: 32px; font-size: 16px; }
+  .vt-row.vt-hdr {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .vt-row.vt-hdr > div {
+    padding: 4px 4px;
+    text-align: center;
+  }
+  @media (max-width: 700px) {
+    .vt-row {
+      grid-template-columns: 62px 1fr 42px 38px 48px 48px 48px 1.2fr 28px;
+      font-size: 12px;
+      gap: 3px;
+    }
+    .vt-row input { padding: 5px 4px; font-size: 12px; }
+    .vt-row.vt-hdr { font-size: 9px; }
+  }
+
   /* ABG/VBG quick-interpretation box */
   .bg-interp {
     background: #f0f9ff;
@@ -1354,6 +1391,25 @@
           <div class="input-clear-row">
             <input type="text" id="aNeuro" list="neuroList" placeholder="Pick from list or type…">
             <button type="button" class="clear-btn" onclick="$('aNeuro').value=''">✕</button>
+          </div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
+        <summary>Vital Signs Trend (in-flight monitor snapshots)</summary>
+        <div class="fieldset-body">
+          <div class="hint">In-flight monitor snapshots over time. Up to 20 entries. Add a row manually or photograph the monitor (pilot OCR). Each row has its own timestamp you can adjust if the monitor's clock was off or not visible.</div>
+          <div id="vitalsTrendRows"></div>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <button type="button" class="add-btn" style="flex:1;min-width:140px" onclick="addVitalsTrendRow()">+ Add row</button>
+            <button type="button" class="add-btn" style="flex:1;min-width:140px;background:#fee2e2;color:#991b1b;border-color:#fecaca" onclick="clearVitalsTrend()">Clear all</button>
+          </div>
+          <div class="ocr-block" id="ocrBlockVitals" style="display:none;margin-top:10px">
+            <label class="ocr-label" for="ocrVitalsFile">📷 Monitor photo(s) (pilot · up to 20) — cover patient identifiers first</label>
+            <input type="file" id="ocrVitalsFile" accept="image/*" capture="environment" multiple onchange="handleVitalsPhotos(event)">
+            <div id="ocrVitalsStatus" class="hint"></div>
           </div>
         </div>
       </details>
@@ -3245,6 +3301,7 @@ ${JSON.stringify({
       vitals: { bp: val('vsBP'), hr: val('vsHR'), rr: val('vsRR'),
                 spo2: val('vsSpO2'), temp: val('vsTemp'), glu: val('vsGlu'),
                 o2dev: val('vsO2dev') },
+      vitalsTrend: gatherVitalsTrend(),
       assess: { gcs: val('gcs'), pain: val('pain'), rass: val('rass'),
                 skin: val('aSkin'), pupils: val('aPupils'), head: val('aHead'),
                 cardiac: val('aCardiac'), lungs: val('aLungs'), abd: val('aAbd'),
@@ -3361,6 +3418,7 @@ CRITICAL INSTRUCTIONS:
 - Use exact times, names, doses, and numbers from the data; do not invent values.
 - If "times.roomEntry" is provided, include it in the narrative as the time the flight crew entered the room/ambulance. If "times.monitorApplied" is provided, note when the cardiac monitor was applied. Mention these in the patient handoff / transport flow section, not in the H&P narrative.
 - Include allergies prominently in the template under a dedicated "Allergies:" line. If "allergies.status" is "nkda", write "NKDA". If "nka", write "NKA". Otherwise list each allergen with type and reaction (e.g., "Penicillin (Medication) — anaphylaxis; Shellfish (Food) — hives").
+- If "vitalsTrend" has entries, render them in the template under a "Vital Signs Trend (in-flight):" line as a compact list ordered by time (e.g., "08:42 BP 138/82, HR 92, RR 18, SpO2 96%, EtCO2 35; 08:55 BP 122/74, HR 88, RR 16, SpO2 98%, EtCO2 36"). In the narrative, reference any clinically significant trend (e.g., "BP normalized after fluid resuscitation between 08:42 and 09:10").
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
 - Use professional EMS/clinical language.
 - Do not use em dashes.
@@ -3378,7 +3436,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   // ====== Photo OCR (Phase 4 — pilot only) ======
   function refreshPhotoOcrUi(){
     const on = loadSettings().photoOcr;
-    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'ocrBlockVitals', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = on ? 'block' : 'none';
     });
@@ -3493,6 +3551,114 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   function confirmPhi(label){
     return confirm(`PHI WARNING\n\nYou are about to send a ${label} photo to the Claude API.\n\nConfirm you have covered or removed:\n  • Patient name\n  • MRN / patient ID\n  • Date of birth\n  • Any other identifiers visible on the screen\n\nPress OK to proceed, Cancel to abort.`);
   }
+  // ====== Vital Signs Trend ======
+  function nowHHMM(){
+    const d = new Date();
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+  function vtAttr(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+  function addVitalsTrendRow(data){
+    data = data || {};
+    const list = $('vitalsTrendRows');
+    if (!list) return;
+    const dataRows = list.querySelectorAll('.vt-row:not(.vt-hdr)');
+    if (dataRows.length >= 20) {
+      alert('Maximum 20 vitals snapshots. Remove some to add more.');
+      return;
+    }
+    if (!list.querySelector('.vt-hdr')) {
+      const hdr = document.createElement('div');
+      hdr.className = 'vt-row vt-hdr';
+      hdr.innerHTML = '<div>Time</div><div>BP</div><div>HR</div><div>RR</div><div>SpO2</div><div>EtCO2</div><div>Temp</div><div>Notes / rhythm</div><div></div>';
+      list.appendChild(hdr);
+    }
+    const div = document.createElement('div');
+    div.className = 'vt-row';
+    const t = data.time || nowHHMM();
+    div.innerHTML =
+      '<input type="time" class="vt-time" value="' + vtAttr(t) + '">' +
+      '<input type="text" class="vt-bp" placeholder="120/80" value="' + vtAttr(data.bp) + '">' +
+      '<input type="text" class="vt-hr" placeholder="88" value="' + vtAttr(data.hr) + '">' +
+      '<input type="text" class="vt-rr" placeholder="18" value="' + vtAttr(data.rr) + '">' +
+      '<input type="text" class="vt-spo2" placeholder="98" value="' + vtAttr(data.spo2) + '">' +
+      '<input type="text" class="vt-etco2" placeholder="35" value="' + vtAttr(data.etco2) + '">' +
+      '<input type="text" class="vt-temp" placeholder="98.6" value="' + vtAttr(data.temp) + '">' +
+      '<input type="text" class="vt-notes" placeholder="rhythm / alarms / event" value="' + vtAttr(data.notes) + '">' +
+      '<button type="button" class="remove-btn" title="Remove">×</button>';
+    div.querySelector('.remove-btn').addEventListener('click', () => {
+      div.remove();
+      const remaining = list.querySelectorAll('.vt-row:not(.vt-hdr)');
+      if (!remaining.length) {
+        const hdr = list.querySelector('.vt-hdr');
+        if (hdr) hdr.remove();
+      }
+    });
+    list.appendChild(div);
+  }
+  function clearVitalsTrend(){
+    if (!confirm('Clear all vitals trend rows?')) return;
+    $('vitalsTrendRows').innerHTML = '';
+  }
+  function gatherVitalsTrend(){
+    return Array.from(document.querySelectorAll('#vitalsTrendRows .vt-row:not(.vt-hdr)')).map(div => ({
+      time: div.querySelector('.vt-time').value,
+      bp: div.querySelector('.vt-bp').value.trim(),
+      hr: div.querySelector('.vt-hr').value.trim(),
+      rr: div.querySelector('.vt-rr').value.trim(),
+      spo2: div.querySelector('.vt-spo2').value.trim(),
+      etco2: div.querySelector('.vt-etco2').value.trim(),
+      temp: div.querySelector('.vt-temp').value.trim(),
+      notes: div.querySelector('.vt-notes').value.trim(),
+    })).filter(r => r.bp || r.hr || r.rr || r.spo2 || r.etco2 || r.temp || r.notes);
+  }
+  async function handleVitalsPhotos(event){
+    let files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    if (files.length > 20) {
+      if (!confirm('Selected ' + files.length + ' files. Max is 20 per upload. Continue with the first 20?')) {
+        event.target.value = '';
+        return;
+      }
+      files = files.slice(0, 20);
+    }
+    if (!confirmPhi(files.length + ' patient monitor photo' + (files.length === 1 ? '' : 's'))) {
+      event.target.value = '';
+      return;
+    }
+    const status = $('ocrVitalsStatus');
+    status.innerHTML = '<span class="spinner"></span> Extracting vitals from ' + files.length + ' photo' + (files.length === 1 ? '' : 's') + '…';
+    status.style.color = '#5b21b6';
+    const prompt = 'Examine the ' + files.length + ' patient monitor photo(s) IN ORDER (photo 1, photo 2, …). For each photo extract the vital signs displayed. Return ONLY a JSON object:\n' +
+      '{ "snapshots": [ { "photo_index": 0, "time": "HH:MM 24h", "bp": "120/80", "hr": "88", "rr": "18", "spo2": "98", "etco2": "35", "temp": "98.6", "map": "", "notes": "rhythm / alarms / vent mode" } ] }\n' +
+      'Rules:\n' +
+      '- One entry per photo, same order as the photos.\n' +
+      '- "time" should be the clock time displayed on the monitor (24h HH:MM). If the time is NOT visible, leave it empty — the user will set it.\n' +
+      '- "bp" can be NIBP or IBP — preserve the displayed format (e.g., "120/80").\n' +
+      '- All numeric values as strings; strip the unit (the form has unit labels).\n' +
+      '- Use empty string for any value not visible. Do not invent values.\n' +
+      '- Use "notes" for rhythm name (e.g., "SR", "AFib"), alarm states, vent mode, or any other clinically relevant on-screen text.\n' +
+      'Return ONLY the JSON object — no markdown.';
+    try {
+      const text = await callClaudeVisionMulti(prompt, files);
+      const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      const data = JSON.parse(clean);
+      const snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
+      if (!snapshots.length) {
+        status.textContent = 'No vitals extracted. Try clearer photos.';
+        status.style.color = '#991b1b';
+        return;
+      }
+      snapshots.forEach(s => addVitalsTrendRow(s));
+      status.innerHTML = '✓ Added ' + snapshots.length + ' snapshot' + (snapshots.length === 1 ? '' : 's') + '. <b>Review each row</b> — adjust the time field if the monitor clock wasn\'t visible or was off.';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      event.target.value = '';
+    }
+  }
+
   async function handlePumpPhoto(event){
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
@@ -4591,6 +4757,8 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('medSummary')) $('medSummary').innerHTML = '';
     if ($('clinicalInterp')) $('clinicalInterp').innerHTML = '<span class="empty">Click the button above to get an AI clinical interpretation.</span>';
     if ($('labRows')) $('labRows').innerHTML = '';
+    if ($('vitalsTrendRows')) $('vitalsTrendRows').innerHTML = '';
+    if ($('ocrVitalsStatus')) $('ocrVitalsStatus').textContent = '';
     if ($('bgInterp')) $('bgInterp').classList.remove('show');
     document.querySelector('input[name=bgType][value=abg]').checked = true;
     licensePhotoDataUrls = [];
@@ -5308,6 +5476,32 @@ ${transcript}`;
     if (vitalsLines.length) {
       html += '<h2>Initial Vitals (PTA)</h2>';
       html += `<p>${vitalsLines.map(escapeHtml).join('\n')}</p>`;
+    }
+
+    // Vital Signs Trend (in-flight monitor snapshots)
+    if (Array.isArray(d.vitalsTrend) && d.vitalsTrend.length) {
+      const cols = [
+        { key: 'time', label: 'Time' },
+        { key: 'bp', label: 'BP' },
+        { key: 'hr', label: 'HR' },
+        { key: 'rr', label: 'RR' },
+        { key: 'spo2', label: 'SpO2' },
+        { key: 'etco2', label: 'EtCO2' },
+        { key: 'temp', label: 'Temp' },
+        { key: 'notes', label: 'Notes' },
+      ].filter(c => d.vitalsTrend.some(r => r && r[c.key] && String(r[c.key]).trim()));
+      if (cols.length) {
+        html += '<h2>Vital Signs Trend (in-flight)</h2>';
+        html += '<table><thead><tr>';
+        cols.forEach(c => { html += `<th>${escapeHtml(c.label)}</th>`; });
+        html += '</tr></thead><tbody>';
+        d.vitalsTrend.forEach(r => {
+          html += '<tr>';
+          cols.forEach(c => { html += `<td>${escapeHtml((r && r[c.key]) || '')}</td>`; });
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+      }
     }
 
     // ABG/VBG
