@@ -1514,6 +1514,11 @@
           <label>Sedation Drips (if intubated)</label>
           <input type="text" id="sedation" placeholder="Propofol 30 mcg/kg/min; Fentanyl 1 mcg/kg/hr">
 
+          <div style="margin-top:14px;font-weight:600;color:#0c4a6e;font-size:13px">IV Push Medications</div>
+          <div class="hint">Add each IV push (IVP) medication given. Use the quick-pick dropdown (grouped by drug class) to fill the name, then enter dose, time, and response.</div>
+          <div id="pushMedRows"></div>
+          <button type="button" class="calc-btn" style="width:auto;margin-top:6px" onclick="addPushMedRow()">➕ Add IV push medication</button>
+
           <div class="ocr-block" id="ocrBlockMeds" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrMedsFile">📷 Face sheet home medications photo (pilot) — cover patient identifiers first</label>
             <input type="file" id="ocrMedsFile" accept="image/*" multiple onchange="handleMedsPhoto(event)" style="display:none">
@@ -3585,6 +3590,7 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
       ivs: gatherIVs(),
       meds: val('medsPTA'),
       drips: val('drips'),
+      pushMeds: gatherPushMeds(),
       rsi: val('rsi'),
       sedation: val('sedation'),
       vent: isVent ? { mode: val('vMode'), fio2: val('vFiO2'), tv: val('vTV'),
@@ -3655,6 +3661,7 @@ IV access:
 
 Medications / Drips:
 - [list each med/drip with rate and time]
+- IV push medications: [for each item in pushMeds, list name, dose, route, time, and response/notes]
 - RSI Agents: [rsi or "N/A"]
 - Sedation: [sedation or "N/A"]
 - Other IV meds: [other]
@@ -4479,6 +4486,72 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
     })).filter(r => r.name || r.value);
   }
 
+  // ====== IV Push Medications ======
+  const PUSH_MED_GROUPS = {
+    'Sedation / Induction': ['Etomidate', 'Ketamine', 'Midazolam (Versed)', 'Lorazepam (Ativan)', 'Diazepam (Valium)', 'Propofol (bolus)'],
+    'Analgesia': ['Fentanyl', 'Morphine', 'Hydromorphone (Dilaudid)', 'Ketamine (analgesic dose)'],
+    'Paralytics (NMBA)': ['Rocuronium', 'Vecuronium', 'Succinylcholine'],
+    'Vasopressors (push-dose / bolus)': ['Push-dose Epinephrine', 'Push-dose Phenylephrine', 'Ephedrine', 'Vasopressin'],
+    'Cardiac / Antiarrhythmic': ['Adenosine', 'Amiodarone', 'Lidocaine', 'Diltiazem (Cardizem)', 'Metoprolol', 'Esmolol', 'Atropine', 'Epinephrine 1 mg (arrest)', 'Calcium chloride', 'Calcium gluconate', 'Magnesium sulfate', 'Sodium bicarbonate', 'Digoxin'],
+    'Antihypertensive / Vasodilator': ['Labetalol', 'Hydralazine', 'Nitroglycerin (IV bolus)', 'Enalaprilat'],
+    'Anticonvulsant': ['Lorazepam (Ativan)', 'Midazolam (Versed)', 'Levetiracetam (Keppra)', 'Fosphenytoin', 'Phenytoin', 'Valproate (Depacon)', 'Phenobarbital'],
+    'Reversal / Antidote': ['Naloxone (Narcan)', 'Flumazenil (Romazicon)', 'Glucagon', 'Sodium bicarbonate (TCA)', 'Idarucizumab (Praxbind)', 'Protamine', 'Calcium (CCB/Mg tox)'],
+    'Diuretic': ['Furosemide (Lasix)', 'Bumetanide (Bumex)'],
+    'Glucose / Electrolyte': ['Dextrose 50% (D50)', 'Dextrose 10%', 'Thiamine', 'Calcium chloride', 'Calcium gluconate', 'Magnesium sulfate', 'Insulin regular (hyperkalemia)', 'Sodium bicarbonate'],
+    'Antiemetic': ['Ondansetron (Zofran)', 'Promethazine (Phenergan)', 'Metoclopramide (Reglan)', 'Prochlorperazine (Compazine)'],
+    'Steroid': ['Methylprednisolone (Solu-Medrol)', 'Dexamethasone (Decadron)', 'Hydrocortisone (Solu-Cortef)'],
+    'Allergy / Hemostasis / Other': ['Diphenhydramine (Benadryl)', 'Famotidine (Pepcid)', 'Tranexamic acid (TXA)', 'Hydroxocobalamin (Cyanokit)'],
+  };
+  function buildPushMedOptions(){
+    let html = '<option value="">— Quick pick —</option>';
+    Object.keys(PUSH_MED_GROUPS).forEach(g => {
+      html += `<optgroup label="${g}">` + PUSH_MED_GROUPS[g].map(m => `<option value="${attrEsc(m)}">${m}</option>`).join('') + '</optgroup>';
+    });
+    html += '<optgroup label="Other"><option value="__other">Other (type name)</option></optgroup>';
+    return html;
+  }
+  function onPushPick(sel){
+    const card = sel.closest('.abg-row');
+    if (!card) return;
+    const nameInput = card.querySelector('.pm-name');
+    if (sel.value === '__other') { nameInput.value = ''; nameInput.focus(); }
+    else if (sel.value) { nameInput.value = sel.value; }
+    sel.selectedIndex = 0;
+  }
+  function addPushMedRow(data){
+    data = data || {};
+    const wrap = $('pushMedRows');
+    if (!wrap) return;
+    const div = document.createElement('div');
+    div.className = 'abg-row';
+    const n = wrap.querySelectorAll('.abg-row').length + 1;
+    div.innerHTML =
+      `<div class="abg-row-head"><span>Push med #${n}</span><button type="button" title="Remove">×</button></div>
+      <div class="row-4">
+        <div><label>Quick pick (by class)</label><select class="pm-pick" onchange="onPushPick(this)">${buildPushMedOptions()}</select></div>
+        <div><label>Medication</label><input type="text" class="pm-name" value="${attrEsc(data.name)}" placeholder="e.g., Fentanyl"></div>
+        <div><label>Dose</label><input type="text" class="pm-dose" value="${attrEsc(data.dose)}" placeholder="e.g., 100 mcg"></div>
+        <div><label>Route</label><input type="text" class="pm-route" value="${attrEsc(data.route || 'IVP')}"></div>
+      </div>
+      <div class="row-3">
+        <div><label>Time</label><input type="time" class="pm-time" value="${attrEsc(data.time)}"></div>
+        <div><label>Given by</label><input type="text" class="pm-by" value="${attrEsc(data.by)}" placeholder="RN / crew"></div>
+        <div><label>Response / notes</label><input type="text" class="pm-notes" value="${attrEsc(data.notes)}" placeholder="e.g., improved sedation; RASS 0"></div>
+      </div>`;
+    div.querySelector('.abg-row-head button').addEventListener('click', () => { div.remove(); renumberPushMeds(); });
+    wrap.appendChild(div);
+  }
+  function renumberPushMeds(){
+    document.querySelectorAll('#pushMedRows .abg-row .abg-row-head span').forEach((s, i) => { s.textContent = 'Push med #' + (i + 1); });
+  }
+  function gatherPushMeds(){
+    const v = (div, cls) => { const el = div.querySelector(cls); return el && el.value ? el.value.trim() : ''; };
+    return Array.from(document.querySelectorAll('#pushMedRows .abg-row')).map(div => ({
+      name: v(div, '.pm-name'), dose: v(div, '.pm-dose'), route: v(div, '.pm-route'),
+      time: v(div, '.pm-time'), by: v(div, '.pm-by'), notes: v(div, '.pm-notes'),
+    })).filter(m => m.name || m.dose);
+  }
+
   // ====== ABG/VBG quick interpretation ======
   function interpretGas(){
     const ph = parseFloat(val('bgPh'));
@@ -5289,6 +5362,7 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('medSummary')) $('medSummary').innerHTML = '';
     if ($('clinicalInterp')) $('clinicalInterp').innerHTML = '<span class="empty">Click the button above to get an AI clinical interpretation.</span>';
     if ($('labRows')) $('labRows').innerHTML = '';
+    if ($('pushMedRows')) $('pushMedRows').innerHTML = '';
     if ($('vitalsTrendRows')) $('vitalsTrendRows').innerHTML = '';
     if ($('ocrVitalsStatus')) $('ocrVitalsStatus').textContent = '';
     if ($('bgInterp')) $('bgInterp').classList.remove('show');
@@ -5345,6 +5419,7 @@ ${JSON.stringify(data, null, 2)}`;
         fluid: (d.querySelector('.iv-fluid') || {}).value || '' })),
       allergies: gatherAllergies(),
       labs: gatherLabRows(),
+      pushMeds: (typeof gatherPushMeds === 'function') ? gatherPushMeds() : [],
       abgs: (typeof serialAbgs !== 'undefined') ? serialAbgs.slice() : [],
       vitalsTrend: (typeof gatherVitalsTrend === 'function') ? gatherVitalsTrend() : [],
       inflightLog: (typeof inflightLogData !== 'undefined') ? inflightLogData.slice() : [],
@@ -5383,6 +5458,7 @@ ${JSON.stringify(data, null, 2)}`;
         (a.items || []).forEach(it => addAllergyRow(it));
       }
       if ($('labRows')) { $('labRows').innerHTML = ''; (s.labs || []).forEach(l => addLabRow(l)); }
+      if ($('pushMedRows') && typeof addPushMedRow === 'function') { $('pushMedRows').innerHTML = ''; (s.pushMeds || []).forEach(m => addPushMedRow(m)); }
       if ($('vitalsTrendRows') && typeof addVitalsTrendRow === 'function') {
         $('vitalsTrendRows').innerHTML = ''; (s.vitalsTrend || []).forEach(v => addVitalsTrendRow(v));
       }
