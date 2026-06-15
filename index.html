@@ -1194,6 +1194,44 @@
           <input type="text" id="recvUnit" placeholder="ED, Trauma Bay 1 / OR / SICU">
           <label>Service / Specialty (if known)</label>
           <input type="text" id="recvSvc" placeholder="General Surgery / Trauma">
+
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0 6px">
+          <div style="font-weight:600;color:#0c4a6e;font-size:13px">Patient Handoff &amp; Disposition</div>
+          <label>Handoff received by — RN</label>
+          <div class="name-cred-row">
+            <input type="text" id="handoffRNName" placeholder="Receiving RN name">
+            <select id="handoffRNCred">
+              <option value="RN">RN</option>
+              <option value="BSN, RN">BSN, RN</option>
+              <option value="CCRN">CCRN</option>
+              <option value="CFRN">CFRN</option>
+              <option value="CEN">CEN</option>
+              <option value="LPN">LPN</option>
+            </select>
+            <button type="button" class="clear-btn" onclick="clearNameCred('handoffRN')" title="Clear">✕</button>
+          </div>
+          <label>Handoff received by — Physician / Provider</label>
+          <div class="name-cred-row">
+            <input type="text" id="handoffMDName" placeholder="Receiving physician / provider name">
+            <select id="handoffMDCred">
+              <option value="MD">MD</option>
+              <option value="DO">DO</option>
+              <option value="PA">PA</option>
+              <option value="NP">NP</option>
+              <option value="FNP">FNP</option>
+            </select>
+            <button type="button" class="clear-btn" onclick="clearNameCred('handoffMD')" title="Clear">✕</button>
+          </div>
+          <label>Patient condition at handoff</label>
+          <select id="ptCondition">
+            <option value="">—</option>
+            <option>Stable</option>
+            <option>Guarded</option>
+            <option>Serious</option>
+            <option>Serious but stable</option>
+            <option>Critical</option>
+            <option>Critical but stable</option>
+          </select>
         </div>
       </details>
     </fieldset>
@@ -3567,6 +3605,7 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
             mechanism: val('sceneMech') },
       receiving: { hospital: val('recvHosp'), address: val('recvAddr'),
                    md: nameCred('recvMD'), unit: val('recvUnit'), service: val('recvSvc') },
+      handoff: { rn: nameCred('handoffRN'), md: nameCred('handoffMD'), condition: val('ptCondition') },
       diagnosis: combinedDiagnosis(),
       diagnosisChips: dxSelected.slice(),
       timeFlags: gatherTSFlags(),
@@ -5380,37 +5419,38 @@ Patient was left in stable condition with the HCA Florida Kendall Hospital traum
     btn.innerHTML = '<span class="spinner"></span>Combining…';
     setStatus('<span class="spinner"></span>Combining all information into one narrative…');
     try {
-      const prompt = `You are a critical-care flight crew documentarian. Combine ALL of the information gathered below into ONE complete, comprehensive transport narrative.
+      const prompt = `You are a critical-care flight crew documentarian. Produce ONE document with EXACTLY TWO clearly labeled sections, using ONLY the data below.
 
-Follow the FORMAT, structure, paragraph flow, tone, and level of clinical detail of the GOLD-STANDARD EXAMPLE below. Organize the narrative in the same logical order it uses, devoting a paragraph (or merged paragraphs) to each as data allows:
-1) opening line — flight unit was requested by [requester] at [sending facility] for [emergent/urgent] [interfacility/scene] transport of a [age]-year-old [sex] with [diagnosis] requiring [capability not available at the sending facility];
-2) bedside report received from [sending physician] and [sending RN]; receiving acceptance obtained by [accepting MD, specialty] at [receiving facility] (note trauma/specialty level if known);
-3) history / mechanism of injury or illness per sending staff;
-4) injuries, home medications, anticoagulant/antiplatelet use, allergies;
-5) imaging review;
-6) flight-crew physical assessment (neuro/GCS, pupils, airway, HEENT, chest, lungs, SpO2);
-7) abdomen, pelvis, back, extremities, neurological deficits;
-8) vital signs;
-9) IV/IO access, patient briefed and verbalized understanding;
-10) belongings and records, transfer device, head-of-bed / positioning precautions;
-11) any consultation with the accepting physician regarding pre-arrival interventions;
-12) loading — hot load (rotors turning) vs cold load — with safety briefing, hearing protection, and symptom instructions;
-13) securing in the aircraft, monitoring initiated, blood glucose, cabin temperature;
-14) en route serial assessments and the patient's course/response;
-15) medical-necessity justification for air transport;
-16) ground vs air distance and time comparison;
-17) radio report ~10 minutes prior to arrival and acknowledgment;
-18) hot unload vs cold offload, met by team, transport to trauma room / ICU;
-19) bedside handoff to [receiving MD] and [receiving RN], records/belongings transferred;
-20) disposition — patient left in stable condition with the receiving team.
+============================
+SECTION 1 — header line: "DEMOGRAPHICS (FOR BILLING)"
+A compact block of labeled lines (NOT prose). Include ONLY lines that have data:
+- Patient name; DOB; Age; Sex; MRN
+- Address
+- OCA / Run #; Date of transport
+- Flight unit; Aircraft
+- Sending facility (origin)
+- Receiving facility; Admit unit
+- Accepting physician (name, credentials)
+- Primary diagnosis / reason for transport
+
+============================
+SECTION 2 — header line: "MEDICAL RECORD"
+A complete narrative in past-tense, professional clinical prose, following the FORMAT and flow of the GOLD-STANDARD EXAMPLE. BEGIN with the flight unit (e.g., "Trauma Star 2 was requested by [requester] at [sending facility] and arrived to [bed/unit]…"). Cover, in logical order, as the data allows: bedside report received from sending physician/RN and receiving acceptance; history/mechanism; injuries/home meds/anticoagulants/allergies; imaging; flight-crew physical assessment; vital signs; IV/IO access; patient briefed; belongings/records, transfer device, positioning; any accepting-physician consultation; loading (hot vs cold load) with safety briefing; securing in aircraft, monitoring initiated; en route course AND the chronological in-flight timeline events (the "flightTimeline" array — render each as its own sentence/short paragraph beginning with its time, including vital signs, oxygen/airway, any ventilator change WITH the reason and result, IV push meds, and IV drip titrations with reason and outcome); medical-necessity justification for air; ground vs air time/distance; radio report prior to arrival; hot unload vs cold offload and the team that met the aircraft.
+
+END the MEDICAL RECORD with a standardized handoff/disposition paragraph stating ONLY what the data supports:
+- all infusions were transitioned from the flight pumps to the hospital/receiving pumps;
+- the patient was moved using the sheet method;
+- the receiving hospital team performed a safe, coordinated transfer while maintaining the cardiac monitor, the IV lines, and — IF the patient was intubated (ventilator settings present or an ETT/airway documented) — the endotracheal tube;
+- bedside report/handoff was given to the receiving RN ("handoff.rn") and the receiving physician/provider ("handoff.md") — name them with credentials when provided;
+- the patient was left in the care of the receiving hospital staff in "handoff.condition" condition (use the provided condition verbatim, e.g., "stable" or "critical"; if none provided, write "stable" only if the data supports it, otherwise omit the condition).
 
 CRITICAL RULES:
-- Use ONLY the actual data provided below. The example is a STYLE and STRUCTURE guide ONLY — do NOT copy any of its clinical facts, names, diagnoses, numbers, or findings.
-- Omit any item, sentence, or whole paragraph for which no data is provided. Never invent values, names, times, vitals, or findings.
-- Past tense, professional clinical prose. Reference crew by role using the provided names (Flight RN, Flight Paramedic, Pilot). Use the flight unit value verbatim (e.g., "Trauma Star 1").
-- Return ONLY the narrative text — no headings, no bullet points, no markdown, no code fences, no JSON.
+- Use ONLY the actual data provided. The example is a STYLE/STRUCTURE guide ONLY — never copy its names, diagnoses, numbers, or findings.
+- Omit any line, sentence, or item for which no data is provided. Never invent values, names, times, vitals, or findings.
+- The ONLY headings allowed are the two section headers exactly as written above. No bullet points in the MEDICAL RECORD, no markdown, no code fences, no JSON.
+- Use the flight unit value verbatim (e.g., "Trauma Star 2"). Past tense throughout.
 
-===== GOLD-STANDARD EXAMPLE (format/structure reference only — do not reuse its content) =====
+===== GOLD-STANDARD EXAMPLE (style/structure for the MEDICAL RECORD only — do not reuse its content) =====
 ${COMBINED_GOLD_EXAMPLE}
 ===== END EXAMPLE =====
 
