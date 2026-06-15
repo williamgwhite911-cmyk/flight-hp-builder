@@ -1774,34 +1774,56 @@
 
     <fieldset>
       <details>
-        <summary>Critical Care Air Transport (hot load/offload, radio, turnover)</summary>
+        <summary>Load / Off-Load (Hot vs Cold) &amp; Closest Hospital / Bypass</summary>
         <div class="fieldset-body">
+          <div class="hint"><b>Hot</b> = rotors turning during the load/off-load; <b>Cold</b> = rotors stopped. <b>On-Load</b> is at the sending facility / scene; <b>Off-Load</b> is at the receiving facility.</div>
+
+          <div style="margin-top:8px;font-weight:600;color:#0c4a6e;font-size:13px">On-Load (sending / scene)</div>
           <div class="row">
-            <div><label>Hot Load (rotors turning)</label>
+            <div><label>On-Load type</label>
               <select id="cctHotLoad">
                 <option value="">—</option>
-                <option value="yes">Yes — hot loaded</option>
-                <option value="no">No — cold load (rotors stopped)</option>
+                <option value="yes">Hot load (rotors turning)</option>
+                <option value="no">Cold load (rotors stopped)</option>
               </select>
             </div>
-            <div><label>Hot Load Time</label><input type="time" id="cctHotLoadTime"></div>
+            <div><label>On-Load time</label><input type="time" id="cctHotLoadTime"></div>
           </div>
-          <label>Hot Load Notes</label>
-          <input type="text" id="cctHotLoadNotes" placeholder="e.g., loaded left side with ground crew assist; secured per protocol">
+          <label>On-Load notes (side loaded, ground-crew assist, securing)</label>
+          <input type="text" id="cctHotLoadNotes" placeholder="e.g., cold load; loaded left side with ground-crew assist; secured per protocol">
 
+          <div style="margin-top:12px;font-weight:600;color:#0c4a6e;font-size:13px">Off-Load (receiving)</div>
           <div class="row">
-            <div><label>Hot Offload (rotors turning)</label>
+            <div><label>Off-Load type</label>
               <select id="cctHotOffload">
                 <option value="">—</option>
-                <option value="yes">Yes — hot offloaded</option>
-                <option value="no">No — cold offload (rotors stopped)</option>
+                <option value="yes">Hot off-load (rotors turning)</option>
+                <option value="no">Cold off-load (rotors stopped)</option>
               </select>
             </div>
-            <div><label>Hot Offload Time</label><input type="time" id="cctHotOffloadTime"></div>
+            <div><label>Off-Load time</label><input type="time" id="cctHotOffloadTime"></div>
           </div>
-          <label>Hot Offload Notes</label>
-          <input type="text" id="cctHotOffloadNotes" placeholder="e.g., offloaded to awaiting trauma team; rooftop helipad">
+          <label>Off-Load notes (helipad/bedside, awaiting team)</label>
+          <input type="text" id="cctHotOffloadNotes" placeholder="e.g., cold off-load to awaiting trauma team; rooftop helipad">
 
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:14px 0 8px">
+          <div style="font-weight:600;color:#0c4a6e;font-size:13px">🏥 Closest most appropriate hospital &amp; bypass</div>
+          <div class="hint">Identifies the closest <b>appropriate</b> facility for this patient's needs and lists any closer hospitals that were bypassed and by how far. Uses the diagnosis, the chosen receiving facility, and the origin (sending facility or scene). Exact air-mile distances require a Google Maps key in Settings; otherwise distances are AI estimates to verify.</div>
+          <div class="row">
+            <div><label>Closest appropriate hospital</label><input type="text" id="closestHosp" list="hospitalList" placeholder="Pick, or auto-filled by analysis"></div>
+            <div><label>Closer facilities bypassed</label><input type="text" id="closestHospBypassCount" placeholder="—" readonly></div>
+          </div>
+          <button type="button" class="calc-btn" id="bypassBtn" onclick="analyzeBypass()" style="margin-top:6px">🏥 Analyze closest appropriate hospital &amp; bypass</button>
+          <div id="bypassOut" class="ai-out"></div>
+          <div class="hint" style="margin-top:6px">A written justification is added to <b>Bypassed Closer Facility + Reason</b> in the Distance &amp; Mode Justification section, which flows into the report.</div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
+        <summary>Critical Care Air Transport (radio, turnover)</summary>
+        <div class="fieldset-body">
           <label>Radio Communication with Receiving Facility</label>
           <textarea id="cctRadio" rows="3" placeholder="e.g., Called receiving ~10 min out on MED channel; relayed age/sex, dx/MOI, vitals, interventions/drips, and ETA. Report acknowledged by charge RN."></textarea>
 
@@ -3303,6 +3325,130 @@ ${JSON.stringify({
     }
   }
 
+  // ====== Closest appropriate hospital & bypass analysis ======
+  let hospitalCoordCache = {}; // name -> {lat,lng}
+  async function geocodeHospital(name, key){
+    if (hospitalCoordCache[name]) return hospitalCoordCache[name];
+    const addr = HOSPITAL_ADDRESSES[name] || name;
+    const c = await geocodeAddress(addr, key);
+    hospitalCoordCache[name] = c;
+    return c;
+  }
+  function extractJustification(text){
+    const i = text.search(/JUSTIFICATION/i);
+    if (i < 0) return '';
+    let seg = text.slice(i).replace(/^JUSTIFICATION[^\n:]*:?\s*/i, '');
+    seg = seg.replace(/Verify facility capabilities[\s\S]*$/i, '').trim();
+    return seg;
+  }
+  async function analyzeBypass(){
+    const settings = loadSettings();
+    if (!settings.anthropic) { alert('Anthropic API key required. Open Settings to add one.'); openSettings(); return; }
+    const mode = document.querySelector('input[name=callType]:checked').value;
+    // Origin
+    let originLabel, originAddr, originLat = null, originLng = null;
+    if (mode === 'ift') {
+      originLabel = val('sendHospName') || 'sending facility';
+      originAddr = val('sendHospAddr') || val('sendHospName');
+    } else {
+      originLabel = val('sceneLoc') || 'scene';
+      if (val('sceneLat') && val('sceneLon')) { originLat = parseFloat(val('sceneLat')); originLng = parseFloat(val('sceneLon')); }
+      originAddr = (val('sceneLat') && val('sceneLon')) ? `${val('sceneLat')},${val('sceneLon')}` : val('sceneLoc');
+    }
+    const recvName = val('recvHosp') || 'chosen receiving facility';
+    const recvAddr = val('recvAddr') || val('recvHosp');
+    const dx = (typeof combinedDiagnosis === 'function' ? combinedDiagnosis() : '') || val('diagnosis') || '';
+    const acuity = val('acuity');
+    if (!originAddr) { alert('Enter the sending facility / scene location first.'); return; }
+    if (!recvAddr) { alert('Enter the receiving facility first.'); return; }
+
+    const btn = $('bypassBtn'), out = $('bypassOut');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Analyzing…';
+    out.classList.add('show'); out.innerHTML = '<span class="spinner"></span> Analyzing closest appropriate hospital &amp; bypass…';
+
+    // Exact distances via Google (optional)
+    let distanceTable = '';
+    let computedCloser = [];
+    if (settings.google) {
+      try {
+        out.innerHTML = '<span class="spinner"></span> Geocoding origin, receiving facility, and candidate hospitals…';
+        if (originLat == null) { const o = await geocodeAddress(originAddr, settings.google); originLat = o.lat; originLng = o.lng; }
+        const recvC = await geocodeAddress(recvAddr, settings.google);
+        const dRecv = haversineMiles(originLat, originLng, recvC.lat, recvC.lng);
+        const names = Object.keys(HOSPITAL_ADDRESSES);
+        const results = [];
+        let idx = 0;
+        const worker = async () => {
+          while (idx < names.length) {
+            const nm = names[idx++];
+            try { const c = await geocodeHospital(nm, settings.google);
+              results.push({ name: nm, dist: haversineMiles(originLat, originLng, c.lat, c.lng) });
+            } catch (e) { /* skip ungeocodable */ }
+          }
+        };
+        await Promise.all(Array.from({ length: 6 }, worker));
+        results.sort((a, b) => a.dist - b.dist);
+        const sendName = val('sendHospName') || '';
+        computedCloser = results.filter(r => r.dist < dRecv - 0.1 && r.name !== recvName && r.name !== sendName);
+        distanceTable = `Origin → chosen receiving facility (${recvName}): ${dRecv.toFixed(1)} air mi.\n` +
+          (computedCloser.length
+            ? 'Facilities geographically closer to the origin than the receiving facility (air miles, and how much closer):\n' +
+              computedCloser.map(r => `- ${r.name}: ${r.dist.toFixed(1)} mi (${(dRecv - r.dist).toFixed(1)} mi closer)`).join('\n')
+            : 'No catalogued facility is closer to the origin than the chosen receiving facility.');
+        if ($('closestHospBypassCount')) $('closestHospBypassCount').value = String(computedCloser.length);
+      } catch (err) {
+        distanceTable = 'Exact-distance computation unavailable (' + (err.message || err) + '). Distances below are AI estimates to verify.';
+      }
+    } else {
+      distanceTable = 'No Google Maps key set — distances below are AI estimates to verify.';
+    }
+
+    const hospListText = Object.keys(HOSPITAL_ADDRESSES).map(n => `- ${n} (${HOSPITAL_ADDRESSES[n]})`).join('\n');
+    const prompt = `You are a HEMS (Trauma Star / AW139) flight clinician justifying destination selection for a critical-care transport in South Florida.
+Origin: ${originLabel}${originAddr ? ` (${originAddr})` : ''}
+Chosen receiving facility: ${recvName}${recvAddr ? ` (${recvAddr})` : ''}
+Primary diagnosis / problem: ${dx || 'not specified'}
+Acuity: ${acuity || 'not specified'}
+
+Computed distance data (use these exact numbers if present; do not contradict them):
+${distanceTable}
+
+Candidate hospitals (name and address):
+${hospListText}
+
+Tasks — respond in plain text with EXACTLY these headers:
+CLOSEST APPROPRIATE FACILITY
+Name the closest facility that has the CAPABILITY this patient needs (e.g., Level I/II trauma center, PCI/cath lab for STEMI, comprehensive stroke center, hepatology/transplant ICU, high-risk OB/NICU, pediatric, burn, ECMO). If the chosen receiving facility is the closest appropriate one, say so explicitly.
+BYPASS ANALYSIS
+For EACH facility geographically closer to the origin than the chosen receiving facility, state how far it was bypassed (use the computed miles if given) and WHY bypassing it was clinically appropriate (lacks the needed capability), OR flag if a closer facility could have been appropriate. If no facility was closer, state that none were bypassed.
+JUSTIFICATION
+A concise, chart-ready paragraph (3–5 sentences) justifying the destination choice and any bypassed facilities, suitable to paste directly into a transport record.
+
+Be specific. Do not invent a facility's capabilities; if unsure, write "verify." End with: "Verify facility capabilities and follow medical-control/destination protocols."`;
+    try {
+      const resp = await callAnthropic(prompt);
+      out.innerHTML =
+        (settings.google && distanceTable ? '<strong>Computed distances</strong><br>' + formatAiText(distanceTable) + '<hr style="border:none;border-top:1px solid #e2e8f0;margin:8px 0">' : '') +
+        '<strong>Closest appropriate hospital &amp; bypass</strong><br>' + formatAiText(resp);
+      // Pull the named closest facility into the field if currently empty
+      const m = /CLOSEST APPROPRIATE FACILITY\s*\n+\s*([^\n]+)/i.exec(resp);
+      if (m && $('closestHosp') && !$('closestHosp').value.trim()) {
+        const known = Object.keys(HOSPITAL_ADDRESSES).find(n => m[1].includes(n));
+        $('closestHosp').value = known || '';
+      }
+      // Write the justification into the existing bypass textarea (flows into the report)
+      const just = extractJustification(resp);
+      if (just && $('bypass')) {
+        const cur = $('bypass').value.trim();
+        $('bypass').value = cur && !cur.includes(just) ? cur + '\n\n' + just : just;
+      }
+    } catch (err) {
+      out.innerHTML = 'Analysis failed: ' + escapeHtml(err.message || String(err));
+    } finally {
+      btn.disabled = false; btn.innerHTML = '🏥 Analyze closest appropriate hospital &amp; bypass';
+    }
+  }
+
   function updateDistanceCard(){
     const dG = val('dGround'), tG = val('tGround'), dA = val('dAir'), tA = val('tAir');
     if (!dG || !tG || !tA) { $('distanceCard').style.display = 'none'; return; }
@@ -4743,6 +4889,7 @@ Return ONLY the JSON array.`;
     return {
       hotLoad: val('cctHotLoad'), hotLoadTime: val('cctHotLoadTime'), hotLoadNotes: val('cctHotLoadNotes'),
       hotOffload: val('cctHotOffload'), hotOffloadTime: val('cctHotOffloadTime'), hotOffloadNotes: val('cctHotOffloadNotes'),
+      closestAppropriateHospital: val('closestHosp'), bypassJustification: val('bypass'),
       radio: val('cctRadio'),
       turnoverTrauma: val('cctTurnoverTrauma'),
       turnoverICU: val('cctTurnoverICU'),
@@ -4769,8 +4916,11 @@ Return ONLY the JSON array.`;
 MISSION SUMMARY
 Open with the flight unit, who requested the transport, the sending facility/agency, the patient (age/sex), the diagnosis / reason for transport, and the receiving facility/unit.
 
+DESTINATION SELECTION & BYPASS
+ONLY if closestAppropriateHospital or bypassJustification is provided: state the closest appropriate facility for the patient's needs and justify the destination, including any closer facilities that were bypassed and why (capability). Use bypassJustification verbatim or as the basis for this paragraph.
+
 HOT LOAD
-Describe loading the patient onto the aircraft. If hot loaded (rotors turning), state that explicitly with the time and any notes. If a cold load, state the aircraft was shut down for loading. (hotLoad="yes" means rotors turning.)
+Describe loading the patient onto the aircraft. If hot loaded (rotors turning), state that explicitly with the time and any notes. If a cold load, state the aircraft was shut down for loading. (hotLoad="yes" means rotors turning; "no" means a cold load.)
 
 EN ROUTE CRITICAL CARE
 Summarize clinical status and all critical-care management during flight: airway/ventilator settings, drips and titration, IV/IO access, monitoring, interventions, and the patient's response. Draw on the vitals, vent, drips, IV, RSI/sedation, and assessment data.
