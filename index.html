@@ -554,6 +554,52 @@
   .bg-interp.show { display: block; }
   .bg-interp strong { color: #0c4a6e; }
 
+  /* AI tool output box (vent interpretation, ABG → vent rec) */
+  .ai-out {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #1e293b;
+    display: none;
+  }
+  .ai-out.show { display: block; }
+  .ai-out strong { color: #0c4a6e; }
+  .ai-tool-block {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #fcfdff;
+  }
+  /* Serial ABG editable rows */
+  .abg-list { margin-top: 8px; }
+  .abg-row {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    margin-top: 6px;
+    background: #fff;
+  }
+  .abg-row-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    color: #0c4a6e;
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .abg-row-head button {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #dc2626; color: #fff; border: none;
+    font-weight: 700; font-size: 14px; line-height: 20px;
+    cursor: pointer; padding: 0;
+  }
+  .abg-row-head button:hover { background: #991b1b; }
+
   /* Photo thumbnail grid (license / face sheet / etc.) */
   .photo-thumbs {
     display: flex;
@@ -1579,15 +1625,64 @@
               <div><label>Pmean (MAP)</label><input type="text" id="vMAP" placeholder="9"></div>
               <div><label>Exh. MinVol</label><input type="text" id="vMinVol" placeholder="7.2 L"></div>
             </div>
+            <div class="row-4">
+              <div><label>VTE (exhaled Vt)</label><input type="text" id="vVTE" placeholder="450 mL"></div>
+              <div><label>ETCO₂</label><input type="text" id="vETCO2" placeholder="40 mmHg"></div>
+              <div><label>Cstat</label><input type="text" id="vCstat" placeholder="45 mL/cmH₂O"></div>
+              <div><label>Rinsp</label><input type="text" id="vRinsp" placeholder="10 cmH₂O/L/s"></div>
+            </div>
+            <div class="row-4">
+              <div><label>RCexp</label><input type="text" id="vRCexp" placeholder="0.6 s"></div>
+            </div>
+
+            <div style="margin-top:12px;font-weight:600;color:#0c4a6e;font-size:13px">ET tube cuff pressure</div>
+            <div class="row-3">
+              <div><label>Cuff pressure (cmH₂O)</label><input type="text" id="vCuff" placeholder="25" oninput="checkCuff()"></div>
+              <div><label>Measured by</label><input type="text" id="vCuffBy" placeholder="manometer"></div>
+              <div><label>Time</label><input type="time" id="vCuffTime"></div>
+            </div>
+            <div id="cuffInterp" class="bg-interp"></div>
           </div>
+
           <div class="ocr-block" id="ocrBlockVent" style="display:none;margin-top:8px">
-            <label class="ocr-label" for="ocrVentFile">📷 Vent screen photo (pilot) — cover patient identifiers first</label>
-            <input type="file" id="ocrVentFile" accept="image/*" multiple onchange="handleVentPhoto(event)" style="display:none">
+            <label class="ocr-label" for="ocrVentFile">📷 Vent screen photos (up to 30) — cover patient identifiers first</label>
+            <input type="file" id="ocrVentFile" accept="image/*" multiple onchange="onVentPhotos(event)" style="display:none">
             <div class="photo-src-btns">
               <button type="button" class="calc-btn" onclick="pickPhoto('ocrVentFile','camera')">📷 Take Photo</button>
               <button type="button" class="calc-btn" onclick="pickPhoto('ocrVentFile','library')">🖼️ Choose from Library</button>
             </div>
+            <div id="ventThumbs"></div>
+            <div id="ventPhotoCount" class="hint"></div>
+            <button type="button" class="calc-btn" id="ventExtractBtn" onclick="extractVentPhotos()" style="margin-top:6px">🔎 Extract latest settings from photos</button>
             <div id="ocrVentStatus" class="hint"></div>
+          </div>
+
+          <div class="ai-tool-block" style="margin-top:12px">
+            <div style="font-weight:600;color:#0c4a6e;font-size:13px">🧠 AI ventilator interpretation</div>
+            <div class="hint">Sends the current vent settings, measured values, cuff pressure, and most recent ABG to Claude for an interpretation of what is happening and recommended corrective actions. Review before acting — clinician judgment required.</div>
+            <button type="button" class="calc-btn" id="ventAiBtn" onclick="interpretVentAI()" style="margin-top:6px">🧠 Interpret vent data &amp; recommend actions</button>
+            <div id="ventAiOut" class="ai-out"></div>
+          </div>
+
+          <div class="ai-tool-block" id="serialAbgTool" style="margin-top:14px">
+            <div style="font-weight:600;color:#0c4a6e;font-size:13px">🩸 Serial ABGs → ventilator recommendation</div>
+            <div class="hint">Add multiple arterial blood gases (by photo, manually, or pulled from the ABG/VBG section). Claude interprets the <b>most recent</b> gas and recommends ventilator setting changes to correct the imbalance.</div>
+            <div class="ocr-block" id="ocrBlockAbg" style="display:none;margin-top:6px">
+              <label class="ocr-label" for="ocrAbgFile">📷 ABG photo(s) — cover identifiers; each photo = one gas</label>
+              <input type="file" id="ocrAbgFile" accept="image/*" multiple onchange="onAbgPhotos(event)" style="display:none">
+              <div class="photo-src-btns">
+                <button type="button" class="calc-btn" onclick="pickPhoto('ocrAbgFile','camera')">📷 Take Photo</button>
+                <button type="button" class="calc-btn" onclick="pickPhoto('ocrAbgFile','library')">🖼️ Choose from Library</button>
+              </div>
+              <div id="ocrAbgStatus" class="hint"></div>
+            </div>
+            <div class="photo-src-btns" style="margin-top:6px">
+              <button type="button" class="calc-btn" onclick="addAbgFromSection()">➕ Add current ABG (from section)</button>
+              <button type="button" class="calc-btn" onclick="addAbgManual()">✏️ Add ABG manually</button>
+            </div>
+            <div id="abgList" class="abg-list"></div>
+            <button type="button" class="calc-btn" id="abgRecBtn" onclick="recommendVentFromAbg()" style="margin-top:6px">🫁 Interpret most recent ABG &amp; recommend vent settings</button>
+            <div id="abgRecOut" class="ai-out"></div>
           </div>
         </div>
       </details>
@@ -3317,7 +3412,9 @@ ${JSON.stringify({
                        trigger: val('vTrig'), pramp: val('vPramp'), ets: val('vETS'),
                        asvMinVol: val('vASV'), ibw: val('vIBW'), pmax: val('vPmax'),
                        ppeak: val('vPpeak'), pplat: val('vPplat'), map: val('vMAP'),
-                       minVol: val('vMinVol') } : null,
+                       minVol: val('vMinVol'), vte: val('vVTE'), etco2: val('vETCO2'),
+                       cstat: val('vCstat'), rinsp: val('vRinsp'), rcexp: val('vRCexp'),
+                       cuff: val('vCuff'), cuffBy: val('vCuffBy'), cuffTime: val('vCuffTime') } : null,
       distance: { dGround: val('dGround'), tGround: val('tGround'),
                   dAir: val('dAir'), tAir: val('tAir') },
       bypass: val('bypass'),
@@ -3400,7 +3497,8 @@ Ventilator Settings (only include this section if patient is intubated; Hamilton
 - I:E ratio: [ie]   Inspiratory time (Ti): [ti]
 - Flow trigger: [trigger]   P-ramp (rise time): [pramp]   ETS: [ets]
 - ASV %MinVol: [asvMinVol]   IBW/PBW: [ibw]   Pmax/limit: [pmax]
-- Measured: Ppeak [ppeak], Pplateau [pplat], Pmean/MAP [map], exhaled MinVol [minVol]
+- Measured: Ppeak [ppeak], Pplateau [pplat], Pmean/MAP [map], exhaled MinVol [minVol], VTE [vte], ETCO2 [etco2], Cstat [cstat], Rinsp [rinsp], RCexp [rcexp]
+- ETT cuff pressure: [cuff] cmH2O
 
 Transport Details and Justification
 
@@ -3436,7 +3534,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   // ====== Photo OCR (Phase 4 — pilot only) ======
   function refreshPhotoOcrUi(){
     const on = loadSettings().photoOcr;
-    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'ocrBlockVitals', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockAbg', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'ocrBlockVitals', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = on ? 'block' : 'none';
     });
@@ -3708,16 +3806,55 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no m
       event.target.value = '';
     }
   }
-  async function handleVentPhoto(event){
+  // ====== Vent screen photo gallery (up to 30) ======
+  const VENT_PHOTO_MAX = 30;
+  let ventPhotoItems = []; // [{ dataUrl, file }]
+  function onVentPhotos(event){
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    if (!confirmPhi('ventilator')) { event.target.value = ''; return; }
+    let remaining = files.length;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        if (ventPhotoItems.length < VENT_PHOTO_MAX) ventPhotoItems.push({ dataUrl: e.target.result, file });
+        if (--remaining === 0) renderVentThumbs();
+      };
+      reader.onerror = () => { if (--remaining === 0) renderVentThumbs(); };
+      reader.readAsDataURL(file);
+    });
+    event.target.value = '';
+  }
+  function removeVentPhotoAt(idx){ ventPhotoItems.splice(idx, 1); renderVentThumbs(); }
+  function clearVentPhotos(){ ventPhotoItems = []; renderVentThumbs(); }
+  function renderVentThumbs(){
+    const wrap = $('ventThumbs'), count = $('ventPhotoCount');
+    const n = ventPhotoItems.length;
+    if (count) count.textContent = n ? `${n} of ${VENT_PHOTO_MAX} photo${n===1?'':'s'} queued` + (n >= VENT_PHOTO_MAX ? ' (max reached)' : '') : '';
+    if (!wrap) return;
+    if (!n) { wrap.innerHTML = ''; return; }
+    const thumbs = ventPhotoItems.map((it, idx) => `
+      <div class="photo-thumb">
+        <img src="${it.dataUrl}" alt="Vent ${idx + 1}">
+        <button type="button" class="photo-thumb-remove" onclick="removeVentPhotoAt(${idx})" title="Remove">×</button>
+      </div>`).join('');
+    wrap.innerHTML = `<div class="photo-thumbs">${thumbs}</div>
+      <button type="button" class="clear-btn" onclick="clearVentPhotos()" style="margin-top:4px">Clear all (${n})</button>`;
+  }
+  async function extractVentPhotos(){
+    if (!ventPhotoItems.length) { alert('Add at least one vent screen photo first.'); return; }
+    if (!confirmPhi('ventilator')) return;
+    await runVentOcr(ventPhotoItems.map(it => it.file));
+  }
+  async function runVentOcr(files){
+    if (!files || !files.length) return;
     const status = $('ocrVentStatus');
+    const btn = $('ventExtractBtn');
     const n = files.length;
+    if (btn) btn.disabled = true;
     status.innerHTML = `<span class="spinner"></span> Extracting vent settings from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
     const prompt = `Examine the mechanical ventilator screen photo(s) — often a Hamilton T2 transport ventilator — and extract the current settings and monitored values. If multiple photos show different states, prefer the most recent/most complete view. Return ONLY a JSON object:
-{ "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "", "pinsp": "", "ie_ratio": "", "ti": "", "trigger": "", "pramp": "", "ets": "", "asv_minvol": "", "ibw": "", "pmax": "", "peak_pressure": "", "plateau_pressure": "", "mean_pressure": "", "minute_ventilation": "" }
+{ "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "", "pinsp": "", "ie_ratio": "", "ti": "", "trigger": "", "pramp": "", "ets": "", "asv_minvol": "", "ibw": "", "pmax": "", "peak_pressure": "", "plateau_pressure": "", "mean_pressure": "", "minute_ventilation": "", "vte": "", "etco2": "", "cstat": "", "rinsp": "", "rcexp": "" }
 - "mode": ventilator mode as shown (Hamilton: "(S)CMV+", "APVcmv", "SIMV+", "APVsimv", "SPONT", "ASV", "DuoPAP", "APRV", "NIV"; or generic "AC/VC", "PRVC", "SIMV", "CPAP")
 - "fio2": oxygen as percentage (e.g., "40%")
 - "tv": tidal volume in mL;  "rate": set respiratory rate (breaths/min)
@@ -3726,6 +3863,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no m
 - "trigger": flow trigger (L/min);  "pramp": pressure ramp / rise time (ms);  "ets": expiratory trigger sensitivity (%)
 - "asv_minvol": ASV %MinVol;  "ibw": ideal/predicted body weight;  "pmax": pressure limit (cmH2O)
 - "peak_pressure" (Ppeak), "plateau_pressure" (Pplat), "mean_pressure" (Pmean/MAP), "minute_ventilation" (exhaled MinVol)
+- "vte" (exhaled tidal volume VTE, mL), "etco2" (end-tidal CO2, mmHg), "cstat" (static compliance, mL/cmH2O), "rinsp" (inspiratory resistance, cmH2O/L/s), "rcexp" (expiratory time constant RCexp, s)
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
     try {
       let text = await callClaudeVisionMulti(prompt, files);
@@ -3754,7 +3892,129 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
       setIfFilled('vPplat', data.plateau_pressure);
       setIfFilled('vMAP', data.mean_pressure);
       setIfFilled('vMinVol', data.minute_ventilation);
+      setIfFilled('vVTE', data.vte);
+      setIfFilled('vETCO2', data.etco2);
+      setIfFilled('vCstat', data.cstat);
+      setIfFilled('vRinsp', data.rinsp);
+      setIfFilled('vRCexp', data.rcexp);
       status.innerHTML = '✓ Vent settings populated. Review for accuracy.';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Extraction failed: ' + (err.message || err);
+      status.style.color = '#991b1b';
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // ====== ET tube cuff pressure check ======
+  function checkCuff(){
+    const c = parseFloat(val('vCuff'));
+    const el = $('cuffInterp');
+    if (!el) return;
+    if (isNaN(c)) { el.classList.remove('show'); el.innerHTML = ''; return; }
+    let msg;
+    if (c < 20) msg = `Cuff ${c} cmH₂O is LOW (target 20–30) — risk of air leak, micro-aspiration, and inadequate ventilation. Add air and recheck.`;
+    else if (c > 30) msg = `Cuff ${c} cmH₂O is HIGH (target 20–30) — risk of tracheal mucosal ischemia. Remove air and recheck.`;
+    else msg = `Cuff ${c} cmH₂O is within target range (20–30).`;
+    el.innerHTML = '<strong>Cuff check:</strong> ' + msg;
+    el.classList.add('show');
+  }
+
+  // ====== AI helpers: vent + ABG text builders ======
+  function formatAiText(t){ return escapeHtml(String(t)).replace(/\n/g, '<br>'); }
+  function buildVentSummaryText(){
+    const rows = [
+      ['Mode', val('vMode')], ['FiO2', val('vFiO2')], ['Tidal volume', val('vTV')], ['Set rate', val('vRate')],
+      ['PEEP', val('vPEEP')], ['Pressure support', val('vPS')], ['Pinsp/Pcontrol', val('vPinsp')], ['I:E', val('vIE')],
+      ['Ti', val('vTi')], ['IBW/PBW', val('vIBW')], ['Pmax limit', val('vPmax')],
+      ['Ppeak', val('vPpeak')], ['Pplateau', val('vPplat')], ['Pmean', val('vMAP')], ['Exhaled MinVol', val('vMinVol')],
+      ['VTE', val('vVTE')], ['EtCO2', val('vETCO2')], ['Cstat', val('vCstat')], ['Rinsp', val('vRinsp')], ['RCexp', val('vRCexp')],
+      ['ETT cuff pressure', val('vCuff') ? val('vCuff') + ' cmH₂O' : '']
+    ];
+    return rows.filter(r => r[1]).map(r => `- ${r[0]}: ${r[1]}`).join('\n');
+  }
+
+  // ====== Serial ABGs ======
+  let serialAbgs = []; // [{ time, type, ph, pco2, po2, hco3, be, lactate, fio2, sat, source }]
+  function abgFromFields(){
+    const t = document.querySelector('input[name=bgType]:checked');
+    return { time: val('bgTime'), type: (t && t.value) || 'abg', ph: val('bgPh'), pco2: val('bgPco2'),
+             po2: val('bgPo2'), hco3: val('bgHco3'), be: val('bgBe'), lactate: val('bgLact'),
+             fio2: val('bgFio2'), sat: val('bgSao2') };
+  }
+  function addAbgFromSection(){
+    const a = abgFromFields();
+    if (!a.ph && !a.pco2 && !a.po2) { alert('Fill in the ABG/VBG section first.'); return; }
+    a.source = 'section'; serialAbgs.push(a); sortAbgs(); renderAbgList();
+  }
+  function addAbgManual(){
+    serialAbgs.push({ time: '', type: 'abg', ph: '', pco2: '', po2: '', hco3: '', be: '', lactate: '', fio2: '', sat: '', source: 'manual' });
+    renderAbgList();
+  }
+  function sortAbgs(){ serialAbgs.sort((a, b) => String(a.time || '').localeCompare(String(b.time || ''))); }
+  function sortAbgsAndRender(){ sortAbgs(); renderAbgList(); }
+  function updateAbg(i, f, v){ if (serialAbgs[i]) serialAbgs[i][f] = v; }
+  function removeAbgAt(i){ serialAbgs.splice(i, 1); renderAbgList(); }
+  function renderAbgList(){
+    const wrap = $('abgList');
+    if (!wrap) return;
+    if (!serialAbgs.length) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = serialAbgs.map((a, i) => `
+      <div class="abg-row">
+        <div class="abg-row-head"><span>ABG #${i + 1}${a.source === 'photo' ? ' 📷' : a.source === 'section' ? ' ⟵section' : ''}</span>
+          <button type="button" onclick="removeAbgAt(${i})" title="Remove">×</button></div>
+        <div class="row-4">
+          <div><label>Time</label><input type="time" value="${a.time || ''}" onchange="updateAbg(${i},'time',this.value);sortAbgsAndRender()"></div>
+          <div><label>pH</label><input type="text" value="${escapeHtml(a.ph || '')}" onchange="updateAbg(${i},'ph',this.value)"></div>
+          <div><label>PaCO₂</label><input type="text" value="${escapeHtml(a.pco2 || '')}" onchange="updateAbg(${i},'pco2',this.value)"></div>
+          <div><label>PaO₂</label><input type="text" value="${escapeHtml(a.po2 || '')}" onchange="updateAbg(${i},'po2',this.value)"></div>
+        </div>
+        <div class="row-4">
+          <div><label>HCO₃</label><input type="text" value="${escapeHtml(a.hco3 || '')}" onchange="updateAbg(${i},'hco3',this.value)"></div>
+          <div><label>BE</label><input type="text" value="${escapeHtml(a.be || '')}" onchange="updateAbg(${i},'be',this.value)"></div>
+          <div><label>Lactate</label><input type="text" value="${escapeHtml(a.lactate || '')}" onchange="updateAbg(${i},'lactate',this.value)"></div>
+          <div><label>FiO₂</label><input type="text" value="${escapeHtml(a.fio2 || '')}" onchange="updateAbg(${i},'fio2',this.value)"></div>
+        </div>
+      </div>`).join('');
+  }
+  function mostRecentAbg(){
+    if (serialAbgs.length) {
+      const withTime = serialAbgs.filter(a => a.time);
+      if (withTime.length) return withTime.reduce((m, a) => String(a.time) >= String(m.time) ? a : m);
+      return serialAbgs[serialAbgs.length - 1];
+    }
+    const a = abgFromFields();
+    return (a.ph || a.pco2 || a.po2) ? a : null;
+  }
+  function abgToText(a){
+    if (!a) return '';
+    const parts = [['time', a.time], ['type', (a.type || 'abg').toUpperCase()], ['pH', a.ph], ['PaCO2', a.pco2],
+      ['PaO2', a.po2], ['HCO3', a.hco3], ['BE', a.be], ['lactate', a.lactate], ['FiO2', a.fio2], ['SaO2', a.sat]];
+    return parts.filter(p => p[1]).map(p => `${p[0]} ${p[1]}`).join(', ');
+  }
+  async function onAbgPhotos(event){
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    if (!confirmPhi('arterial blood gas')) { event.target.value = ''; return; }
+    const status = $('ocrAbgStatus');
+    const n = files.length;
+    status.innerHTML = `<span class="spinner"></span> Reading ${n} ABG photo${n === 1 ? '' : 's'}…`;
+    status.style.color = '#5b21b6';
+    const prompt = `These are photo(s) of arterial blood gas (ABG/VBG) result printouts or analyzer screens. For EACH photo, extract ONE gas. Return ONLY a JSON array (one object per photo, in order):
+[ { "time": "HH:MM or empty", "type": "abg|vbg", "ph": "", "pco2": "", "po2": "", "hco3": "", "be": "", "lactate": "", "fio2": "", "sat": "" } ]
+- Numbers only, no units. pco2/po2 in mmHg, hco3/be in mEq/L, lactate in mmol/L, fio2 as percent (e.g. "40"), sat as percent.
+- Use the draw/result time if shown. Omit any unreadable field; do not invent values.
+Return ONLY the JSON array.`;
+    try {
+      let text = await callClaudeVisionMulti(prompt, files);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      let arr = JSON.parse(text);
+      if (!Array.isArray(arr)) arr = [arr];
+      let added = 0;
+      arr.forEach(a => { if (a && (a.ph || a.pco2 || a.po2)) { a.source = 'photo'; serialAbgs.push(a); added++; } });
+      sortAbgs(); renderAbgList();
+      status.innerHTML = `✓ Added ${added} gas${added === 1 ? '' : 'es'}. Review for accuracy.`;
       status.style.color = '#16a34a';
     } catch (err) {
       status.textContent = 'Extraction failed: ' + (err.message || err);
@@ -3763,6 +4023,67 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
       event.target.value = '';
     }
   }
+
+  // ====== AI: ventilator interpretation ======
+  async function interpretVentAI(){
+    const settings = loadSettings();
+    if (!settings.anthropic) { alert('Anthropic API key required. Open Settings to add one.'); openSettings(); return; }
+    const vent = buildVentSummaryText();
+    if (!vent.trim()) { alert('Enter or extract ventilator settings first.'); return; }
+    const abg = abgToText(mostRecentAbg());
+    const btn = $('ventAiBtn'), out = $('ventAiOut');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Analyzing…';
+    out.classList.add('show'); out.innerHTML = '<span class="spinner"></span> Analyzing ventilator data…';
+    const prompt = `You are a critical-care flight clinician analyzing live transport ventilator data (often a Hamilton T2).
+Ventilator settings & measured values:
+${vent}
+${abg ? 'Most recent arterial blood gas: ' + abg + '\n' : ''}
+Provide a concise, practical assessment for a flight nurse/paramedic in plain text with short headers and bullets:
+1) INTERPRETATION — what the data shows (oxygenation, ventilation, and lung mechanics: compliance/resistance, evidence of obstruction, auto-PEEP, derecruitment, patient–ventilator dyssynchrony).
+2) PROBLEMS — bullet the concerning findings (e.g., a wide Ppeak–Pplateau gap = high airway resistance; high plateau = low compliance; rising EtCO2; low VTE vs set Vt).
+3) RECOMMENDED ACTIONS — specific, ordered, actionable ventilator changes and assessments, each with brief rationale. Include lung-protective targets (Vt 6–8 mL/kg IBW, Pplateau < 30, driving pressure < 15, SpO2/PaO2 goals, permissive hypercapnia where appropriate).
+4) SAFETY — when to call medical control / escalate.
+Be specific to the numbers provided. Do not invent values that were not provided. End with: "Clinical judgment and medical-control orders override these suggestions."`;
+    try {
+      const resp = await callAnthropic(prompt);
+      out.innerHTML = '<strong>AI ventilator interpretation</strong><br>' + formatAiText(resp);
+    } catch (err) {
+      out.innerHTML = 'Analysis failed: ' + escapeHtml(err.message || String(err));
+    } finally {
+      btn.disabled = false; btn.innerHTML = '🧠 Interpret vent data &amp; recommend actions';
+    }
+  }
+
+  // ====== AI: most-recent ABG → vent recommendation ======
+  async function recommendVentFromAbg(){
+    const settings = loadSettings();
+    if (!settings.anthropic) { alert('Anthropic API key required. Open Settings to add one.'); openSettings(); return; }
+    const a = mostRecentAbg();
+    if (!a) { alert('Add at least one ABG (photo, manual, or from the ABG section) first.'); return; }
+    const abgText = abgToText(a);
+    const vent = buildVentSummaryText();
+    const btn = $('abgRecBtn'), out = $('abgRecOut');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Analyzing…';
+    out.classList.add('show'); out.innerHTML = '<span class="spinner"></span> Interpreting ABG &amp; building vent recommendations…';
+    const prompt = `You are a critical-care flight clinician. Interpret the MOST RECENT arterial blood gas and recommend ventilator changes to correct the imbalance for a mechanically ventilated transport patient.
+Most recent gas: ${abgText}
+${vent ? 'Current ventilator settings / measured values:\n' + vent : 'Current ventilator settings: not provided.'}
+Provide, in plain text with short headers and bullets:
+1) ABG INTERPRETATION — primary acid–base disorder, compensation (use Winter's formula for expected PaCO2 in metabolic acidosis), anion gap if computable, and oxygenation (P/F ratio if FiO2 given).
+2) TARGET — the physiologic goal (e.g., increase minute ventilation to lower PaCO2 toward the compensation target; improve oxygenation).
+3) RECOMMENDED VENT CHANGES — specific, ordered adjustments (rate, Vt within 6–8 mL/kg IBW while keeping Pplateau < 30, PEEP/FiO2 per an ARDSnet-style ladder, I:E) with the expected effect, plus when to recheck a gas (e.g., 15–20 min after a change).
+4) CAUTIONS — over-ventilation risk, permissive hypercapnia limits, and the metabolic vs respiratory cause (do not try to fully correct a metabolic acidosis with ventilation alone — treat the underlying cause).
+Be specific to the numbers. Do not invent values. End with: "Clinical judgment and medical-control orders override these suggestions."`;
+    try {
+      const resp = await callAnthropic(prompt);
+      out.innerHTML = '<strong>ABG interpretation &amp; vent recommendation</strong><br><span class="hint">Most recent gas: ' + escapeHtml(abgText) + '</span><br>' + formatAiText(resp);
+    } catch (err) {
+      out.innerHTML = 'Analysis failed: ' + escapeHtml(err.message || String(err));
+    } finally {
+      btn.disabled = false; btn.innerHTML = '🫁 Interpret most recent ABG &amp; recommend vent settings';
+    }
+  }
+
   // Show/hide on initial load
   refreshPhotoOcrUi();
 
@@ -5289,6 +5610,9 @@ ${transcript}`;
       setIf('vASV', d.vent.asvMinVol); setIf('vIBW', d.vent.ibw); setIf('vPmax', d.vent.pmax);
       setIf('vPpeak', d.vent.ppeak); setIf('vPplat', d.vent.pplat);
       setIf('vMAP', d.vent.map); setIf('vMinVol', d.vent.minVol);
+      setIf('vVTE', d.vent.vte); setIf('vETCO2', d.vent.etco2);
+      setIf('vCstat', d.vent.cstat); setIf('vRinsp', d.vent.rinsp); setIf('vRCexp', d.vent.rcexp);
+      setIf('vCuff', d.vent.cuff); setIf('vCuffBy', d.vent.cuffBy); setIf('vCuffTime', d.vent.cuffTime);
     }
     if (d.distance) {
       setIf('dGround', d.distance.dGround); setIf('tGround', d.distance.tGround);
@@ -5671,6 +5995,12 @@ ${transcript}`;
       if (v.pplat) mon.push('Pplat ' + v.pplat);
       if (v.map) mon.push('Pmean ' + v.map);
       if (v.minVol) mon.push('exh MinVol ' + v.minVol);
+      if (v.vte) mon.push('VTE ' + v.vte);
+      if (v.etco2) mon.push('ETCO₂ ' + v.etco2);
+      if (v.cstat) mon.push('Cstat ' + v.cstat);
+      if (v.rinsp) mon.push('Rinsp ' + v.rinsp);
+      if (v.rcexp) mon.push('RCexp ' + v.rcexp);
+      if (v.cuff) mon.push('ETT cuff ' + v.cuff + ' cmH₂O');
       if (parts.length || mon.length) {
         html += '<h2>Ventilator Settings (Hamilton T2)</h2>';
         if (parts.length) html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
