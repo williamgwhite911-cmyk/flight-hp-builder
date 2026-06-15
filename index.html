@@ -2405,6 +2405,7 @@
   <div class="modal">
     <h2>🕓 Saved Records</h2>
     <p style="font-size:13px;color:#475569;margin:6px 0 0;">Saved charts and their generated narratives, stored locally on this device only. <b>Load</b> pulls a record back into the form and output. To move records to another device: <b>Share</b> or tick records and <b>Export selected</b> (use AirDrop / Files), then <b>Import</b> on the other device.</p>
+    <input type="search" id="logSearch" placeholder="🔎 Search by OCA / run #, date, name, or diagnosis…" oninput="renderLog()" style="margin-top:10px;width:100%">
     <div id="logList" style="margin-top:10px"></div>
     <input type="file" id="importRecordsFile" accept="application/json" onchange="importRecords(event)" style="display:none">
     <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
@@ -5744,18 +5745,25 @@ ${JSON.stringify(data, null, 2)}`;
     const name = val('ptName');
     const ageSex = [val('ptAge'), val('ptSex')].filter(Boolean).join(' ');
     const dx = (typeof combinedDiagnosis === 'function' ? combinedDiagnosis() : '') || dxSelected[0] || val('diagnosis');
+    const oca = val('ocaNumber');
     const who = [name, ageSex].filter(Boolean).join(', ');
-    return (who || 'Unnamed patient') + (dx ? ' — ' + dx : '');
+    const base = who || (oca ? 'OCA ' + oca : 'Unnamed patient');
+    return base + (dx ? ' — ' + dx : '');
   }
   function newId(){ return 'r' + Date.now() + Math.floor(Math.random() * 1000); }
   function saveRecord(){
     let recs = loadRecords();
-    const rec = { id: newId(), label: recordLabel(), savedAt: new Date().toISOString(), state: captureState() };
+    const rec = { id: newId(), label: recordLabel(), oca: val('ocaNumber'), chartDate: val('ocaDate'), savedAt: new Date().toISOString(), state: captureState() };
     recs.unshift(rec);
     if (recs.length > 100) recs = recs.slice(0, 100);
     try { storeRecords(recs); setAutosaveStatus('Saved to log ✓ ' + fmtTime(new Date())); }
     catch (e) { alert('Could not save — local storage may be full. Delete old records and try again.'); }
   }
+  // Pull identifiers from a record (top-level or from its captured fields, for older records)
+  function recField(r, id){ return (r.state && r.state.fields && r.state.fields[id] && r.state.fields[id].v) || ''; }
+  function recOca(r){ return r.oca || recField(r, 'ocaNumber'); }
+  function recChartDate(r){ return r.chartDate || recField(r, 'ocaDate'); }
+  function recPatient(r){ return recField(r, 'ptName'); }
   function openLog(){ renderLog(); $('logModal').classList.add('show'); }
   function closeLog(){ $('logModal').classList.remove('show'); }
   function isRealNarr(o){ return o && o.text && o.text.trim() && !/^Click |^Fill in /.test(o.text.trim()); }
@@ -5764,12 +5772,24 @@ ${JSON.stringify(data, null, 2)}`;
     const wrap = $('logList');
     if (!wrap) return;
     if (!recs.length) { wrap.innerHTML = '<p class="hint">No saved records yet. Use 💾 Save to add the current chart.</p>'; return; }
-    wrap.innerHTML = recs.map(r => {
+    const q = (($('logSearch') && $('logSearch').value) || '').trim().toLowerCase();
+    const filtered = !q ? recs : recs.filter(r => {
+      const hay = [r.label, recOca(r), recChartDate(r), recPatient(r), fmtDateTime(new Date(r.savedAt))].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+    if (!filtered.length) { wrap.innerHTML = '<p class="hint">No records match “' + escapeHtml(q) + '”.</p>'; return; }
+    wrap.innerHTML = filtered.map(r => {
       const o = (r.state && r.state.outputs) || {};
       const n = ['narrative', 'template', 'cct', 'combined'].filter(k => isRealNarr(o[k])).length;
+      const oca = recOca(r), cd = recChartDate(r);
+      const meta = [];
+      if (oca) meta.push('OCA ' + escapeHtml(oca));
+      if (cd) meta.push('chart ' + escapeHtml(cd));
+      meta.push('saved ' + escapeHtml(fmtDateTime(new Date(r.savedAt))));
+      meta.push(n + ' narrative' + (n === 1 ? '' : 's'));
       return `<div class="record-item">
         <h4><input type="checkbox" class="rec-check" data-id="${r.id}" style="margin-right:6px;vertical-align:middle">${escapeHtml(r.label || 'Record')}</h4>
-        <div class="record-meta">${escapeHtml(fmtDateTime(new Date(r.savedAt)))} · ${n} narrative${n === 1 ? '' : 's'} saved</div>
+        <div class="record-meta">${meta.join(' · ')}</div>
         <div class="record-actions">
           <button type="button" class="calc-btn" style="width:auto" onclick="loadRecord('${r.id}')">📂 Load</button>
           <button type="button" class="calc-btn" style="width:auto" onclick="toggleRecordNarr('${r.id}', this)">📄 Narratives</button>
