@@ -805,6 +805,20 @@
     padding: 16px;
   }
   .modal-backdrop.show { display: flex; }
+
+  /* Save / autosave toolbar + records log */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px 0; }
+  .tb-btn { width: auto !important; flex: 0 0 auto; }
+  .autosave-status { font-size: 12px; color: #64748b; margin-left: auto; }
+  .record-item { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+  .record-item h4 { margin: 0 0 2px; font-size: 14px; color: #0c4a6e; }
+  .record-meta { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+  .record-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .record-actions .calc-btn { font-size: 12px; padding: 5px 9px; }
+  .record-narr { margin-top: 8px; }
+  .record-narr-sec { margin-top: 6px; }
+  .record-narr-h { font-size: 12px; font-weight: 600; color: #0c4a6e; display: flex; align-items: center; gap: 8px; }
+  .record-narr pre { white-space: pre-wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; font-size: 12px; max-height: 240px; overflow: auto; margin: 4px 0 0; font-family: inherit; }
   .modal {
     background: white; border-radius: 16px; padding: 20px;
     max-width: 520px; width: 100%;
@@ -867,6 +881,13 @@
 <div class="tabs">
   <button class="tab active" onclick="switchTab('form')">Inputs</button>
   <button class="tab" onclick="switchTab('output')">Output</button>
+</div>
+
+<div class="toolbar">
+  <button type="button" class="calc-btn tb-btn" onclick="saveRecord()">💾 Save</button>
+  <button type="button" class="calc-btn tb-btn" onclick="openLog()">🕓 Saved Records<span id="recordsBtnCount"></span></button>
+  <button type="button" class="calc-btn tb-btn" onclick="startFresh()">🆕 New / Clear</button>
+  <span id="autosaveStatus" class="autosave-status"></span>
 </div>
 
 <div class="layout">
@@ -2349,6 +2370,20 @@
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
       <button class="btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="logModal" onclick="if(event.target===this)closeLog()">
+  <div class="modal">
+    <h2>🕓 Saved Records</h2>
+    <p style="font-size:13px;color:#475569;margin:6px 0 0;">Saved charts and their generated narratives, stored locally on this device only. <b>Load</b> pulls a record back into the form and output.</p>
+    <div id="logList" style="margin-top:10px"></div>
+    <input type="file" id="importRecordsFile" accept="application/json" onchange="importRecords(event)" style="display:none">
+    <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
+      <button class="btn-secondary" onclick="document.getElementById('importRecordsFile').click()">⬆ Import</button>
+      <button class="btn-secondary" onclick="exportAllRecords()">⬇ Export all</button>
+      <button class="btn-primary" onclick="closeLog()">Close</button>
     </div>
   </div>
 </div>
@@ -5277,6 +5312,255 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('ptHeightConv')) $('ptHeightConv').textContent = '';
     if ($('ptWeightConv')) $('ptWeightConv').textContent = '';
   }
+
+  // ====== Auto-save, manual save, and saved-records log ======
+  const AUTOSAVE_KEY = 'hp_autosave_v1';
+  const RECORDS_KEY = 'hp_saved_records_v1';
+  let suppressAutosave = false;
+  let autosaveTimer = null;
+
+  function fmtTime(d){ try { return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+  function fmtDateTime(d){ try { return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+  function setAutosaveStatus(msg){ const el = $('autosaveStatus'); if (el) el.textContent = msg || ''; }
+
+  // Capture the full working state (form fields + dynamic rows + generated narratives).
+  // Excludes API keys and raw photos (kept out of storage for privacy / quota).
+  function captureState(){
+    const fields = {};
+    document.querySelectorAll('input[id], select[id], textarea[id]').forEach(el => {
+      if (el.type === 'file' || el.type === 'password') return;
+      if (['anthropicKey', 'googleKey', 'modelSelect', 'enablePhotoOcr', 'importRecordsFile'].includes(el.id)) return;
+      if (el.type === 'radio' || el.type === 'checkbox') fields[el.id] = { c: el.checked };
+      else fields[el.id] = { v: el.value };
+    });
+    const radios = {};
+    document.querySelectorAll('input[type=radio]:checked').forEach(r => { if (r.name) radios[r.name] = r.value; });
+    const out = id => { const el = $(id); return el ? { text: el.textContent, polished: el.classList.contains('polished') } : null; };
+    return {
+      fields, radios,
+      tsFlags: Array.from(document.querySelectorAll('.ts-flag:checked')).map(c => c.value),
+      ivs: Array.from(document.querySelectorAll('#ivList .multi-row')).map(d => ({
+        loc: (d.querySelector('.iv-loc') || {}).value || '',
+        gauge: (d.querySelector('.iv-gauge') || {}).value || '',
+        fluid: (d.querySelector('.iv-fluid') || {}).value || '' })),
+      allergies: gatherAllergies(),
+      labs: gatherLabRows(),
+      abgs: (typeof serialAbgs !== 'undefined') ? serialAbgs.slice() : [],
+      vitalsTrend: (typeof gatherVitalsTrend === 'function') ? gatherVitalsTrend() : [],
+      inflightLog: (typeof inflightLogData !== 'undefined') ? inflightLogData.slice() : [],
+      dx: dxSelected.slice(),
+      outputs: { narrative: out('narrativeOut'), template: out('templateOut'), cct: out('cctOut'), combined: out('combinedOut') },
+    };
+  }
+
+  function restoreState(s){
+    if (!s) return;
+    suppressAutosave = true;
+    try {
+      resetForm();
+      Object.entries(s.fields || {}).forEach(([id, v]) => {
+        const el = $(id); if (!el) return;
+        if ('c' in v) el.checked = v.c; else el.value = (v.v != null ? v.v : '');
+      });
+      // Radio groups — dispatch change so dependent UI (mode/vent/ABG/allergy) updates
+      Object.entries(s.radios || {}).forEach(([name, value]) => {
+        document.querySelectorAll(`input[type=radio][name="${name}"]`).forEach(r => {
+          if (r.value === value) { r.checked = true; r.dispatchEvent(new Event('change')); }
+        });
+      });
+      document.querySelectorAll('.ts-flag').forEach(c => { c.checked = (s.tsFlags || []).includes(c.value); });
+      if ($('ivList')) {
+        $('ivList').innerHTML = '';
+        const ivs = (s.ivs && s.ivs.length) ? s.ivs : [{}];
+        ivs.forEach(iv => addIvLine(iv.gauge || '', iv.loc || '', iv.fluid || ''));
+      }
+      if ($('allergyList')) {
+        $('allergyList').innerHTML = '';
+        const a = s.allergies || { status: 'has', items: [] };
+        document.querySelectorAll('input[name=allergyStatus]').forEach(r => {
+          if (r.value === (a.status || 'has')) { r.checked = true; r.dispatchEvent(new Event('change')); }
+        });
+        (a.items || []).forEach(it => addAllergyRow(it));
+      }
+      if ($('labRows')) { $('labRows').innerHTML = ''; (s.labs || []).forEach(l => addLabRow(l)); }
+      if ($('vitalsTrendRows') && typeof addVitalsTrendRow === 'function') {
+        $('vitalsTrendRows').innerHTML = ''; (s.vitalsTrend || []).forEach(v => addVitalsTrendRow(v));
+      }
+      if (typeof serialAbgs !== 'undefined') {
+        serialAbgs.length = 0; (s.abgs || []).forEach(x => serialAbgs.push(x));
+        if (typeof renderAbgList === 'function') renderAbgList();
+      }
+      if (typeof inflightLogData !== 'undefined') {
+        inflightLogData.length = 0; (s.inflightLog || []).forEach(x => inflightLogData.push(x));
+        if (typeof renderInflightLog === 'function') renderInflightLog();
+      }
+      dxSelected.length = 0; (s.dx || []).forEach(x => dxSelected.push(x)); renderDxChips();
+      const setOut = (id, o) => { const el = $(id); if (el && o) { el.textContent = o.text; el.classList.toggle('polished', !!o.polished); } };
+      if (s.outputs) {
+        setOut('narrativeOut', s.outputs.narrative); setOut('templateOut', s.outputs.template);
+        setOut('cctOut', s.outputs.cct); setOut('combinedOut', s.outputs.combined);
+      }
+      if (typeof interpretGas === 'function') interpretGas();
+      if (typeof checkCuff === 'function') checkCuff();
+      if (typeof updateHeightConv === 'function') updateHeightConv();
+      if (typeof updateWeightConv === 'function') updateWeightConv();
+    } finally {
+      suppressAutosave = false;
+    }
+  }
+
+  function scheduleAutosave(){
+    if (suppressAutosave) return;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(doAutosave, 800);
+  }
+  function doAutosave(){
+    try {
+      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ savedAt: new Date().toISOString(), state: captureState() }));
+      setAutosaveStatus('Autosaved ' + fmtTime(new Date()));
+    } catch (e) {
+      setAutosaveStatus('Autosave failed — storage may be full');
+    }
+  }
+  function startFresh(){
+    if (!confirm('Clear the current form and outputs? Saved records are kept.')) return;
+    resetForm();
+    localStorage.removeItem(AUTOSAVE_KEY);
+    setAutosaveStatus('Cleared');
+  }
+
+  // ---- Saved records log ----
+  function loadRecords(){ try { return JSON.parse(localStorage.getItem(RECORDS_KEY) || '[]'); } catch (e) { return []; } }
+  function storeRecords(arr){ localStorage.setItem(RECORDS_KEY, JSON.stringify(arr)); updateRecordsBtn(); }
+  function updateRecordsBtn(){ const el = $('recordsBtnCount'); if (el) { const n = loadRecords().length; el.textContent = n ? ` (${n})` : ''; } }
+  function recordLabel(){
+    const name = val('ptName');
+    const ageSex = [val('ptAge'), val('ptSex')].filter(Boolean).join(' ');
+    const dx = (typeof combinedDiagnosis === 'function' ? combinedDiagnosis() : '') || dxSelected[0] || val('diagnosis');
+    const who = [name, ageSex].filter(Boolean).join(', ');
+    return (who || 'Unnamed patient') + (dx ? ' — ' + dx : '');
+  }
+  function newId(){ return 'r' + Date.now() + Math.floor(Math.random() * 1000); }
+  function saveRecord(){
+    let recs = loadRecords();
+    const rec = { id: newId(), label: recordLabel(), savedAt: new Date().toISOString(), state: captureState() };
+    recs.unshift(rec);
+    if (recs.length > 100) recs = recs.slice(0, 100);
+    try { storeRecords(recs); setAutosaveStatus('Saved to log ✓ ' + fmtTime(new Date())); }
+    catch (e) { alert('Could not save — local storage may be full. Delete old records and try again.'); }
+  }
+  function openLog(){ renderLog(); $('logModal').classList.add('show'); }
+  function closeLog(){ $('logModal').classList.remove('show'); }
+  function isRealNarr(o){ return o && o.text && o.text.trim() && !/^Click |^Fill in /.test(o.text.trim()); }
+  function renderLog(){
+    const recs = loadRecords();
+    const wrap = $('logList');
+    if (!wrap) return;
+    if (!recs.length) { wrap.innerHTML = '<p class="hint">No saved records yet. Use 💾 Save to add the current chart.</p>'; return; }
+    wrap.innerHTML = recs.map(r => {
+      const o = (r.state && r.state.outputs) || {};
+      const n = ['narrative', 'template', 'cct', 'combined'].filter(k => isRealNarr(o[k])).length;
+      return `<div class="record-item">
+        <h4>${escapeHtml(r.label || 'Record')}</h4>
+        <div class="record-meta">${escapeHtml(fmtDateTime(new Date(r.savedAt)))} · ${n} narrative${n === 1 ? '' : 's'} saved</div>
+        <div class="record-actions">
+          <button type="button" class="calc-btn" style="width:auto" onclick="loadRecord('${r.id}')">📂 Load</button>
+          <button type="button" class="calc-btn" style="width:auto" onclick="toggleRecordNarr('${r.id}', this)">📄 Narratives</button>
+          <button type="button" class="calc-btn" style="width:auto" onclick="exportRecord('${r.id}')">⬇ Export</button>
+          <button type="button" class="calc-btn" style="width:auto" onclick="deleteRecord('${r.id}')">🗑 Delete</button>
+        </div>
+        <div class="record-narr" id="narr_${r.id}" style="display:none"></div>
+      </div>`;
+    }).join('');
+  }
+  function toggleRecordNarr(id, btn){
+    const box = $('narr_' + id); if (!box) return;
+    if (box.style.display === 'block') { box.style.display = 'none'; return; }
+    const rec = loadRecords().find(r => r.id === id); if (!rec) return;
+    const o = (rec.state && rec.state.outputs) || {};
+    const secs = [['Narrative', 'narrative'], ['Template', 'template'], ['CCT Report', 'cct'], ['Combined narrative', 'combined']];
+    let html = '';
+    secs.forEach(([title, key]) => {
+      if (isRealNarr(o[key])) {
+        html += `<div class="record-narr-sec"><div class="record-narr-h">${title}<button type="button" class="calc-btn" style="width:auto" onclick="copyRecordText(this)">Copy</button></div><pre>${escapeHtml(o[key].text.trim())}</pre></div>`;
+      }
+    });
+    box.innerHTML = html || '<p class="hint">No generated narratives were saved in this record.</p>';
+    box.style.display = 'block';
+  }
+  function copyRecordText(btn){
+    const sec = btn.closest('.record-narr-sec');
+    const pre = sec && sec.querySelector('pre');
+    if (pre && navigator.clipboard) navigator.clipboard.writeText(pre.textContent).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy', 1200); });
+  }
+  function loadRecord(id){
+    const rec = loadRecords().find(r => r.id === id); if (!rec) return;
+    if (!confirm('Load this saved record? It replaces the current form and outputs.')) return;
+    restoreState(rec.state);
+    closeLog();
+    setAutosaveStatus('Loaded: ' + (rec.label || 'record'));
+    doAutosave();
+  }
+  function deleteRecord(id){
+    if (!confirm('Delete this saved record permanently?')) return;
+    storeRecords(loadRecords().filter(r => r.id !== id));
+    renderLog();
+  }
+  function downloadJson(obj, filename){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function safeName(s){ return (s || 'record').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'record'; }
+  function exportRecord(id){
+    const rec = loadRecords().find(r => r.id === id); if (!rec) return;
+    downloadJson(rec, 'flight_hp_' + safeName(rec.label) + '.json');
+  }
+  function exportAllRecords(){
+    const recs = loadRecords();
+    if (!recs.length) { alert('No records to export.'); return; }
+    downloadJson({ exportedAt: new Date().toISOString(), records: recs }, 'flight_hp_records.json');
+  }
+  function importRecords(event){
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        const incoming = Array.isArray(data) ? data : (data.records || (data.state ? [data] : []));
+        if (!incoming.length) { alert('No records found in that file.'); return; }
+        const recs = loadRecords();
+        const ids = new Set(recs.map(r => r.id));
+        let added = 0;
+        incoming.forEach(r => { if (r && r.state) { if (!r.id || ids.has(r.id)) r.id = newId(); recs.unshift(r); ids.add(r.id); added++; } });
+        storeRecords(recs); renderLog();
+        alert('Imported ' + added + ' record(s).');
+      } catch (err) { alert('Import failed: ' + (err.message || err)); }
+      finally { event.target.value = ''; }
+    };
+    reader.readAsText(file);
+  }
+
+  function initSaveSystem(){
+    document.addEventListener('input', scheduleAutosave, true);
+    document.addEventListener('change', scheduleAutosave, true);
+    updateRecordsBtn();
+    try {
+      const raw = localStorage.getItem(AUTOSAVE_KEY);
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj && obj.state) {
+          restoreState(obj.state);
+          setAutosaveStatus('Recovered autosave from ' + fmtDateTime(new Date(obj.savedAt)));
+        }
+      }
+    } catch (e) { /* ignore corrupt autosave */ }
+  }
+  // Defer until the whole script has finished initializing the form
+  setTimeout(initSaveSystem, 0);
 
   // ====== Hospital address auto-fill ======
   const HOSPITAL_ADDRESSES = {
