@@ -2404,12 +2404,13 @@
 <div class="modal-backdrop" id="logModal" onclick="if(event.target===this)closeLog()">
   <div class="modal">
     <h2>🕓 Saved Records</h2>
-    <p style="font-size:13px;color:#475569;margin:6px 0 0;">Saved charts and their generated narratives, stored locally on this device only. <b>Load</b> pulls a record back into the form and output.</p>
+    <p style="font-size:13px;color:#475569;margin:6px 0 0;">Saved charts and their generated narratives, stored locally on this device only. <b>Load</b> pulls a record back into the form and output. To move records to another device: <b>Share</b> or tick records and <b>Export selected</b> (use AirDrop / Files), then <b>Import</b> on the other device.</p>
     <div id="logList" style="margin-top:10px"></div>
     <input type="file" id="importRecordsFile" accept="application/json" onchange="importRecords(event)" style="display:none">
     <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
-      <button class="btn-secondary" onclick="document.getElementById('importRecordsFile').click()">⬆ Import</button>
-      <button class="btn-secondary" onclick="exportAllRecords()">⬇ Export all</button>
+      <button class="btn-secondary" onclick="document.getElementById('importRecordsFile').click()">⬆ Import (merge / replace)</button>
+      <button class="btn-secondary" onclick="exportSelected()">📤 Export selected</button>
+      <button class="btn-secondary" onclick="exportAllRecords()">📤 Export all</button>
       <button class="btn-primary" onclick="closeLog()">Close</button>
     </div>
   </div>
@@ -5767,11 +5768,12 @@ ${JSON.stringify(data, null, 2)}`;
       const o = (r.state && r.state.outputs) || {};
       const n = ['narrative', 'template', 'cct', 'combined'].filter(k => isRealNarr(o[k])).length;
       return `<div class="record-item">
-        <h4>${escapeHtml(r.label || 'Record')}</h4>
+        <h4><input type="checkbox" class="rec-check" data-id="${r.id}" style="margin-right:6px;vertical-align:middle">${escapeHtml(r.label || 'Record')}</h4>
         <div class="record-meta">${escapeHtml(fmtDateTime(new Date(r.savedAt)))} · ${n} narrative${n === 1 ? '' : 's'} saved</div>
         <div class="record-actions">
           <button type="button" class="calc-btn" style="width:auto" onclick="loadRecord('${r.id}')">📂 Load</button>
           <button type="button" class="calc-btn" style="width:auto" onclick="toggleRecordNarr('${r.id}', this)">📄 Narratives</button>
+          <button type="button" class="calc-btn" style="width:auto" onclick="shareRecord('${r.id}')">📤 Share</button>
           <button type="button" class="calc-btn" style="width:auto" onclick="exportRecord('${r.id}')">⬇ Export</button>
           <button type="button" class="calc-btn" style="width:auto" onclick="deleteRecord('${r.id}')">🗑 Delete</button>
         </div>
@@ -5819,15 +5821,41 @@ ${JSON.stringify(data, null, 2)}`;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  // Prefer the native share sheet (AirDrop / Messages / Mail / Files on mobile);
+  // fall back to a file download on desktop browsers without file sharing.
+  async function shareJson(obj, filename){
+    const json = JSON.stringify(obj, null, 2);
+    try {
+      if (navigator.canShare) {
+        const file = new File([json], filename, { type: 'application/json' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: filename });
+          return;
+        }
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return; /* else fall through to download */ }
+    downloadJson(obj, filename);
+  }
   function safeName(s){ return (s || 'record').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'record'; }
   function exportRecord(id){
     const rec = loadRecords().find(r => r.id === id); if (!rec) return;
     downloadJson(rec, 'flight_hp_' + safeName(rec.label) + '.json');
   }
+  function shareRecord(id){
+    const rec = loadRecords().find(r => r.id === id); if (!rec) return;
+    shareJson(rec, 'flight_hp_' + safeName(rec.label) + '.json');
+  }
   function exportAllRecords(){
     const recs = loadRecords();
     if (!recs.length) { alert('No records to export.'); return; }
-    downloadJson({ exportedAt: new Date().toISOString(), records: recs }, 'flight_hp_records.json');
+    shareJson({ exportedAt: new Date().toISOString(), records: recs }, 'flight_hp_records.json');
+  }
+  function selectedRecordIds(){ return Array.from(document.querySelectorAll('#logList .rec-check:checked')).map(c => c.getAttribute('data-id')); }
+  function exportSelected(){
+    const ids = selectedRecordIds();
+    if (!ids.length) { alert('Tick the records you want to export first (checkbox next to each).'); return; }
+    const recs = loadRecords().filter(r => ids.includes(r.id));
+    shareJson({ exportedAt: new Date().toISOString(), records: recs }, 'flight_hp_records_' + recs.length + '.json');
   }
   function importRecords(event){
     const file = event.target.files && event.target.files[0];
@@ -5837,13 +5865,29 @@ ${JSON.stringify(data, null, 2)}`;
       try {
         const data = JSON.parse(e.target.result);
         const incoming = Array.isArray(data) ? data : (data.records || (data.state ? [data] : []));
-        if (!incoming.length) { alert('No records found in that file.'); return; }
-        const recs = loadRecords();
-        const ids = new Set(recs.map(r => r.id));
-        let added = 0;
-        incoming.forEach(r => { if (r && r.state) { if (!r.id || ids.has(r.id)) r.id = newId(); recs.unshift(r); ids.add(r.id); added++; } });
+        const valid = incoming.filter(r => r && r.state);
+        if (!valid.length) { alert('No records found in that file.'); return; }
+        const existing = loadRecords();
+        let mode = 'merge';
+        if (existing.length) {
+          const ok = confirm('Importing ' + valid.length + ' record(s).\n\nOK = MERGE with your current ' + existing.length + ' record(s)\nCancel = choose REPLACE (or cancel)');
+          if (!ok) {
+            if (confirm('REPLACE all ' + existing.length + ' current record(s) with the ' + valid.length + ' imported record(s)?\n\nThis permanently deletes the records currently on THIS device.')) mode = 'replace';
+            else return;
+          }
+        }
+        let recs, added;
+        if (mode === 'replace') {
+          recs = valid.map(r => Object.assign({}, r, { id: r.id || newId() }));
+          added = valid.length;
+        } else {
+          recs = existing.slice();
+          const ids = new Set(recs.map(r => r.id));
+          added = 0;
+          valid.forEach(r => { const rr = Object.assign({}, r); if (!rr.id || ids.has(rr.id)) rr.id = newId(); recs.unshift(rr); ids.add(rr.id); added++; });
+        }
         storeRecords(recs); renderLog();
-        alert('Imported ' + added + ' record(s).');
+        alert((mode === 'replace' ? 'Replaced — now ' : 'Merged in ') + added + ' record(s).');
       } catch (err) { alert('Import failed: ' + (err.message || err)); }
       finally { event.target.value = ''; }
     };
