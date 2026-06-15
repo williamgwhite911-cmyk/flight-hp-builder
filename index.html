@@ -1474,25 +1474,6 @@
 
     <fieldset>
       <details>
-        <summary>Vital Signs Trend (in-flight monitor snapshots)</summary>
-        <div class="fieldset-body">
-          <div class="hint">In-flight monitor snapshots over time. Up to 20 entries. Add a row manually or photograph the monitor (pilot OCR). Each row has its own timestamp you can adjust if the monitor's clock was off or not visible.</div>
-          <div id="vitalsTrendRows"></div>
-          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-            <button type="button" class="add-btn" style="flex:1;min-width:140px" onclick="addVitalsTrendRow()">+ Add row</button>
-            <button type="button" class="add-btn" style="flex:1;min-width:140px;background:#fee2e2;color:#991b1b;border-color:#fecaca" onclick="clearVitalsTrend()">Clear all</button>
-          </div>
-          <div class="ocr-block" id="ocrBlockVitals" style="display:none;margin-top:10px">
-            <label class="ocr-label" for="ocrVitalsFile">📷 Monitor photo(s) (pilot · up to 20) — cover patient identifiers first</label>
-            <input type="file" id="ocrVitalsFile" accept="image/*" capture="environment" multiple onchange="handleVitalsPhotos(event)">
-            <div id="ocrVitalsStatus" class="hint"></div>
-          </div>
-        </div>
-      </details>
-    </fieldset>
-
-    <fieldset>
-      <details>
         <summary>IV Access (PTA)</summary>
         <div class="fieldset-body">
           <div id="ivList"></div>
@@ -1878,30 +1859,26 @@
       <details>
         <summary>In-Flight Timeline (timed entries → AI narrative)</summary>
         <div class="fieldset-body">
-          <div class="hint">Add a timed entry for each in-flight event. Each entry captures vital signs, oxygen / delivery device, ventilator settings (with the reason a setting was changed and the result), IV push meds, IV drips (with titration, new rate, reason, and outcome), and comments. Generate a paragraph narrative per entry, then combine all entries into one narrative starting from first patient contact. Entries begin with the time.</div>
+          <div class="hint">One in-flight section. Add a timed entry for each event — manually or by photographing the monitor / ventilator / IV pump (AI fills the entry). Each entry captures vital signs, oxygen / delivery device, ventilator settings (with the reason a setting was changed and the result), IV push meds, IV drips (titration, new rate, reason, outcome), and comments. Generate a paragraph narrative per entry, then combine all entries into one narrative starting from first patient contact. Entries begin with the time.</div>
           <div id="flightEntries"></div>
           <button type="button" class="add-btn" style="margin-top:8px" onclick="addFlightEntry()">➕ Add timed entry</button>
+
+          <div class="ai-tool-block" style="margin-top:10px">
+            <div style="font-weight:600;color:#0c4a6e;font-size:13px">📷 Photo capture → timeline</div>
+            <div class="hint">Photograph the monitor, ventilator, or IV pump (up to 25). AI reads each into a new timed entry (vitals, vent, drips). Cover patient identifiers first.</div>
+            <input type="file" id="inflightFiles" accept="image/*" multiple onchange="onInflightPhotos(event)" style="display:none">
+            <div class="photo-src-btns" style="margin-top:6px">
+              <button type="button" class="calc-btn" onclick="pickPhoto('inflightFiles','camera')">📷 Take Photo</button>
+              <button type="button" class="calc-btn" onclick="pickPhoto('inflightFiles','library')">🖼️ Add from Library</button>
+            </div>
+            <div id="inflightCount" class="hint" style="margin-top:6px"></div>
+            <div id="inflightThumbs" class="inflight-thumbs"></div>
+            <button type="button" class="calc-btn" style="width:100%;margin-top:8px" id="inflightBtn" onclick="extractFlightPhotos()">🤖 Extract photos → add timeline entries</button>
+            <div id="inflightStatus" class="hint"></div>
+          </div>
+
           <button type="button" class="generate-all" style="width:100%;margin-top:10px;background:#0c4a6e" id="flightCombineBtn" onclick="combineFlightNarrative()">📋 Combine all entries into one narrative (from first contact)</button>
           <div id="flightCombinedOut" class="ai-out" style="margin-top:8px"></div>
-        </div>
-      </details>
-    </fieldset>
-
-    <fieldset>
-      <details>
-        <summary>In-Flight Monitoring (serial monitor / vent / pump photos)</summary>
-        <div class="fieldset-body">
-          <div class="hint">During flight, capture up to 25 photos of the monitor, ventilator, and IV pump as you make adjustments. AI reads each into a time-stamped entry added to the chart and report. <b>Cover patient identifiers first.</b></div>
-          <input type="file" id="inflightFiles" accept="image/*" multiple onchange="onInflightPhotos(event)" style="display:none">
-          <div class="photo-src-btns" style="margin-top:8px">
-            <button type="button" class="calc-btn" onclick="pickPhoto('inflightFiles','camera')">📷 Take Photo</button>
-            <button type="button" class="calc-btn" onclick="pickPhoto('inflightFiles','library')">🖼️ Add from Library</button>
-          </div>
-          <div id="inflightCount" class="hint" style="margin-top:6px"></div>
-          <div id="inflightThumbs" class="inflight-thumbs"></div>
-          <button type="button" class="generate-all" style="width:100%;margin-top:8px" id="inflightBtn" onclick="extractInflight()">🤖 Extract readings &amp; add to chart</button>
-          <div id="inflightStatus" class="hint"></div>
-          <div id="inflightLog" class="med-summary"></div>
         </div>
       </details>
     </fieldset>
@@ -4780,6 +4757,59 @@ Return ONLY the narrative text.`;
     }
   }
   function copyFlightCombined(){ if (flightCombinedText && navigator.clipboard) navigator.clipboard.writeText(flightCombinedText); }
+  // Photo capture → timeline entries (reuses the inflight photo gallery: inflightPhotoDataUrls / onInflightPhotos / renderInflightThumbs)
+  async function extractFlightPhotos(){
+    if (typeof inflightPhotoDataUrls === 'undefined' || !inflightPhotoDataUrls.length) { alert('Add at least one photo first.'); return; }
+    if (!confirmPhi('in-flight monitor / ventilator / IV pump')) return;
+    const btn = $('inflightBtn'), status = $('inflightStatus');
+    const n = inflightPhotoDataUrls.length;
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Reading…'; }
+    if (status) { status.innerHTML = `<span class="spinner"></span> Reading ${n} photo${n === 1 ? '' : 's'} into timeline entries…`; status.style.color = '#5b21b6'; }
+    try {
+      const files = await dataUrlsToFiles(inflightPhotoDataUrls, 'inflight');
+      const prompt = `These are serial IN-FLIGHT photos from a critical-care air transport — each shows a patient MONITOR, a VENTILATOR, or an IV/SYRINGE PUMP. For EACH photo, produce ONE time-stamped timeline entry. Return ONLY a JSON array (one object per photo, in order):
+[ {
+  "time": "HH:MM or empty (clock shown on the device)",
+  "vitals": { "bp":"", "hr":"", "rr":"", "spo2":"", "etco2":"", "temp":"", "rhythm":"" },
+  "oxygen": { "device":"", "flow":"" },
+  "vent": { "mode":"", "fio2":"", "vt":"", "rate":"", "peep":"", "ps":"" },
+  "drips": [ { "name":"", "conc":"", "rate":"" } ],
+  "pushMeds": [ { "name":"", "dose":"" } ],
+  "comment": "one concise clinical line summarizing what this photo shows"
+} ]
+- MONITOR → fill vitals (HR, BP/NIBP, RR, SpO2, EtCO2, temp, rhythm).
+- VENTILATOR → fill vent (mode, FiO2, Vt, rate, PEEP, PS) and set oxygen.device to "Mechanical ventilator".
+- IV / SYRINGE PUMP → add to drips (drug name, concentration, rate) or pushMeds.
+- Use only what is visible; leave fields empty if not shown; do not invent values.
+Return ONLY the JSON array.`;
+      let text = await callClaudeVisionMulti(prompt, files);
+      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+      let arr = JSON.parse(text);
+      if (!Array.isArray(arr)) arr = [arr];
+      let added = 0;
+      arr.forEach(o => {
+        if (!o) return;
+        addFlightEntry({
+          time: o.time || '',
+          vitals: o.vitals || {},
+          oxygen: o.oxygen || {},
+          vent: o.vent || {},
+          pushMeds: Array.isArray(o.pushMeds) ? o.pushMeds.filter(m => m && (m.name || m.dose)) : [],
+          drips: Array.isArray(o.drips) ? o.drips.filter(d => d && (d.name || d.rate)) : [],
+          comment: o.comment || '',
+          narrative: '',
+        });
+        added++;
+      });
+      inflightPhotoDataUrls = [];
+      if (typeof renderInflightThumbs === 'function') renderInflightThumbs();
+      if (status) { status.innerHTML = `✓ Added ${added} timeline entr${added === 1 ? 'y' : 'ies'}. Review for accuracy.`; status.style.color = '#16a34a'; }
+    } catch (err) {
+      if (status) { status.textContent = 'Extraction failed: ' + (err.message || err); status.style.color = '#991b1b'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '🤖 Extract photos → add timeline entries'; }
+    }
+  }
 
   // ====== ABG/VBG quick interpretation ======
   function interpretGas(){
@@ -5690,7 +5720,18 @@ ${JSON.stringify(data, null, 2)}`;
       }
       if ($('labRows')) { $('labRows').innerHTML = ''; (s.labs || []).forEach(l => addLabRow(l)); }
       if ($('pushMedRows') && typeof addPushMedRow === 'function') { $('pushMedRows').innerHTML = ''; (s.pushMeds || []).forEach(m => addPushMedRow(m)); }
-      if (typeof flightEntries !== 'undefined') { flightEntries.length = 0; (s.flight || []).forEach(e => flightEntries.push(e)); if (typeof renderFlightEntries === 'function') renderFlightEntries(); }
+      if (typeof flightEntries !== 'undefined') {
+        flightEntries.length = 0;
+        (s.flight || []).forEach(e => flightEntries.push(e));
+        // Backward-compat: fold legacy Vital Signs Trend + In-Flight Monitoring data from
+        // older records into the single timeline (only when there's no native timeline data).
+        if (!flightEntries.length) {
+          const mkId = (typeof newFlightId === 'function') ? newFlightId : newId;
+          (s.vitalsTrend || []).forEach(v => flightEntries.push({ id: mkId(), time: v.time || '', vitals: { bp: v.bp || '', hr: v.hr || '', rr: v.rr || '', spo2: v.spo2 || '', etco2: v.etco2 || '', temp: v.temp || '', rhythm: '' }, oxygen: {}, vent: {}, pushMeds: [], drips: [], comment: v.notes || '', narrative: '' }));
+          (s.inflightLog || []).forEach(it => flightEntries.push({ id: mkId(), time: it.time || '', vitals: {}, oxygen: {}, vent: {}, pushMeds: [], drips: [], comment: it.summary || '', narrative: '' }));
+        }
+        if (typeof renderFlightEntries === 'function') renderFlightEntries();
+      }
       if ($('vitalsTrendRows') && typeof addVitalsTrendRow === 'function') {
         $('vitalsTrendRows').innerHTML = ''; (s.vitalsTrend || []).forEach(v => addVitalsTrendRow(v));
       }
