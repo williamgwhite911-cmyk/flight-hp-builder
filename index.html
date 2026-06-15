@@ -2405,7 +2405,7 @@
   <div class="modal">
     <h2>🕓 Saved Records</h2>
     <p style="font-size:13px;color:#475569;margin:6px 0 0;">Saved charts and their generated narratives, stored locally on this device only. <b>Load</b> pulls a record back into the form and output. To move records to another device: <b>Share</b> or tick records and <b>Export selected</b> (use AirDrop / Files), then <b>Import</b> on the other device.</p>
-    <input type="search" id="logSearch" placeholder="🔎 Search by OCA / run #, date, name, or diagnosis…" oninput="renderLog()" style="margin-top:10px;width:100%">
+    <input type="search" id="logSearch" placeholder="🔎 Search OCA / run #, date, name, diagnosis, or any field…" oninput="renderLog()" style="margin-top:10px;width:100%">
     <div id="logList" style="margin-top:10px"></div>
     <input type="file" id="importRecordsFile" accept="application/json" onchange="importRecords(event)" style="display:none">
     <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
@@ -5764,6 +5764,28 @@ ${JSON.stringify(data, null, 2)}`;
   function recOca(r){ return r.oca || recField(r, 'ocaNumber'); }
   function recChartDate(r){ return r.chartDate || recField(r, 'ocaDate'); }
   function recPatient(r){ return recField(r, 'ptName'); }
+  // Full-text search string for a record: label + OCA + dates + every field VALUE +
+  // dynamic rows (meds, drips, labs, ABGs, allergies, timeline) + generated narratives.
+  function recHaystack(r){
+    const parts = [r.label, recOca(r), recChartDate(r), fmtDateTime(new Date(r.savedAt))];
+    const s = r.state || {};
+    if (s.fields) Object.keys(s.fields).forEach(k => { const f = s.fields[k]; if (f && f.v) parts.push(f.v); });
+    (s.dx || []).forEach(x => parts.push(x));
+    const each = (arr, keys) => (arr || []).forEach(o => keys.forEach(k => { if (o && o[k]) parts.push(o[k]); }));
+    each(s.pushMeds, ['name', 'dose', 'notes']);
+    each(s.labs, ['name', 'value', 'unit']);
+    each(s.abgs, ['ph', 'pco2', 'po2', 'time']);
+    (s.allergies && s.allergies.items || []).forEach(a => { parts.push(a.allergen, a.reaction); });
+    (s.flight || []).forEach(e => {
+      const v = e.vitals || {}, o = e.oxygen || {}, vt = e.vent || {};
+      parts.push(e.time, e.comment, e.narrative, v.bp, v.hr, v.spo2, o.device, vt.mode, vt.changeReason, vt.changeResult);
+      each(e.pushMeds, ['name', 'dose', 'notes']);
+      each(e.drips, ['name', 'titration', 'reason', 'outcome']);
+    });
+    const out = s.outputs || {};
+    ['narrative', 'template', 'cct', 'combined'].forEach(k => { if (out[k] && out[k].text) parts.push(out[k].text); });
+    return parts.filter(Boolean).join(' ').toLowerCase();
+  }
   function openLog(){ renderLog(); $('logModal').classList.add('show'); }
   function closeLog(){ $('logModal').classList.remove('show'); }
   function isRealNarr(o){ return o && o.text && o.text.trim() && !/^Click |^Fill in /.test(o.text.trim()); }
@@ -5773,10 +5795,7 @@ ${JSON.stringify(data, null, 2)}`;
     if (!wrap) return;
     if (!recs.length) { wrap.innerHTML = '<p class="hint">No saved records yet. Use 💾 Save to add the current chart.</p>'; return; }
     const q = (($('logSearch') && $('logSearch').value) || '').trim().toLowerCase();
-    const filtered = !q ? recs : recs.filter(r => {
-      const hay = [r.label, recOca(r), recChartDate(r), recPatient(r), fmtDateTime(new Date(r.savedAt))].join(' ').toLowerCase();
-      return hay.includes(q);
-    });
+    const filtered = !q ? recs : recs.filter(r => recHaystack(r).includes(q));
     if (!filtered.length) { wrap.innerHTML = '<p class="hint">No records match “' + escapeHtml(q) + '”.</p>'; return; }
     wrap.innerHTML = filtered.map(r => {
       const o = (r.state && r.state.outputs) || {};
