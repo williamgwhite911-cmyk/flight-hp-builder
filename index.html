@@ -977,6 +977,22 @@
             <div><label>Flight Paramedic</label><input type="text" id="flightMedic" placeholder="Chris Smith, FP-C"></div>
             <div><label>Pilot</label><input type="text" id="pilot" placeholder="J. Rivera"></div>
           </div>
+          <div class="row">
+            <div><label>Ventilator</label>
+              <select id="ventModel">
+                <option value="Hamilton T1">Hamilton T1</option>
+                <option value="Hamilton T2">Hamilton T2</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div><label>Monitor</label>
+              <select id="monitorModel">
+                <option value="">— Select —</option>
+                <option value="Tempus Pro">Tempus Pro</option>
+                <option value="LIFEPAK 35">LIFEPAK 35</option>
+              </select>
+            </div>
+          </div>
         </div>
       </details>
     </fieldset>
@@ -1627,7 +1643,7 @@
               <div><label>Mode</label>
                 <select id="vMode">
                   <option value="">—</option>
-                  <optgroup label="Hamilton T2">
+                  <optgroup label="Hamilton T1">
                     <option>(S)CMV+</option>
                     <option>APVcmv</option>
                     <option>SIMV+</option>
@@ -1656,7 +1672,7 @@
             <label>Pressure Support (ΔPsupport)</label>
             <input type="text" id="vPS" placeholder="10">
 
-            <div style="margin-top:12px;font-weight:600;color:#0c4a6e;font-size:13px">Hamilton T2 — additional settings</div>
+            <div style="margin-top:12px;font-weight:600;color:#0c4a6e;font-size:13px">Hamilton T1 — additional settings</div>
             <div class="row-3">
               <div><label>Pinsp / Pcontrol</label><input type="text" id="vPinsp" placeholder="15 cmH₂O"></div>
               <div><label>I:E ratio</label><input type="text" id="vIE" placeholder="1:2"></div>
@@ -3571,6 +3587,8 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
       oca: val('ocaNumber'),
       ocaDate: val('ocaDate'),
       statFlight: val('statFlightNum'),
+      ventModel: val('ventModel') || 'Hamilton T1',
+      monitorModel: val('monitorModel'),
       aircraft: val('aircraft'),
       crewRN: val('flightRN'),
       crewMedic: val('flightMedic'),
@@ -3715,7 +3733,7 @@ Initial Vital Signs (prior to flight crew arrival):
 - Temp: [temp]
 - Blood Glucose: [glu]
 
-Ventilator Settings (only include this section if patient is intubated; Hamilton T2 transport ventilator — include only the parameters that have values):
+Ventilator Settings (only include this section if patient is intubated; Hamilton T1 transport ventilator — include only the parameters that have values):
 - Mode: [mode]
 - Tidal Volume (TV): [tv]
 - Rate: [rate]
@@ -4082,7 +4100,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no m
     if (btn) btn.disabled = true;
     status.innerHTML = `<span class="spinner"></span> Extracting vent settings from ${n} photo${n === 1 ? '' : 's'}…`;
     status.style.color = '#5b21b6';
-    const prompt = `Examine the mechanical ventilator screen photo(s) — often a Hamilton T2 transport ventilator — and extract the current settings and monitored values. If multiple photos show different states, prefer the most recent/most complete view. Return ONLY a JSON object:
+    const prompt = `Examine the mechanical ventilator screen photo(s) — often a Hamilton T1 transport ventilator — and extract the current settings and monitored values. If multiple photos show different states, prefer the most recent/most complete view. Return ONLY a JSON object:
 { "mode": "", "fio2": "", "tv": "", "rate": "", "peep": "", "ps": "", "pinsp": "", "ie_ratio": "", "ti": "", "trigger": "", "pramp": "", "ets": "", "asv_minvol": "", "ibw": "", "pmax": "", "peak_pressure": "", "plateau_pressure": "", "mean_pressure": "", "minute_ventilation": "", "vte": "", "etco2": "", "cstat": "", "rinsp": "", "rcexp": "" }
 - "mode": ventilator mode as shown (Hamilton: "(S)CMV+", "APVcmv", "SIMV+", "APVsimv", "SPONT", "ASV", "DuoPAP", "APRV", "NIV"; or generic "AC/VC", "PRVC", "SIMV", "CPAP")
 - "fio2": oxygen as percentage (e.g., "40%")
@@ -4263,7 +4281,7 @@ Return ONLY the JSON array.`;
     const btn = $('ventAiBtn'), out = $('ventAiOut');
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Analyzing…';
     out.classList.add('show'); out.innerHTML = '<span class="spinner"></span> Analyzing ventilator data…';
-    const prompt = `You are a critical-care flight clinician analyzing live transport ventilator data (often a Hamilton T2).
+    const prompt = `You are a critical-care flight clinician analyzing live transport ventilator data (often a Hamilton T1).
 Ventilator settings & measured values:
 ${vent}
 ${abg ? 'Most recent arterial blood gas: ' + abg + '\n' : ''}
@@ -4806,7 +4824,7 @@ Return ONLY the narrative text.`;
     if (status) { status.innerHTML = `<span class="spinner"></span> Reading ${n} photo${n === 1 ? '' : 's'} into timeline entries…`; status.style.color = '#5b21b6'; }
     try {
       const files = await dataUrlsToFiles(inflightPhotoDataUrls, 'inflight');
-      const prompt = `These are serial IN-FLIGHT photos from a critical-care air transport — each shows a patient MONITOR, a VENTILATOR, or an IV/SYRINGE PUMP. For EACH photo, produce ONE time-stamped timeline entry. Return ONLY a JSON array (one object per photo, in order):
+      const prompt = `These are serial IN-FLIGHT photos from a critical-care air transport — each shows a patient MONITOR (commonly a Tempus Pro or LIFEPAK 35), a VENTILATOR (Hamilton T1), or an IV/SYRINGE PUMP. For EACH photo, produce ONE time-stamped timeline entry. Return ONLY a JSON array (one object per photo, in order):
 [ {
   "time": "HH:MM or empty (clock shown on the device)",
   "vitals": { "bp":"", "hr":"", "rr":"", "spo2":"", "etco2":"", "temp":"", "rhythm":"" },
@@ -6906,7 +6924,7 @@ ${transcript}`;
       if (v.rcexp) mon.push('RCexp ' + v.rcexp);
       if (v.cuff) mon.push('ETT cuff ' + v.cuff + ' cmH₂O');
       if (parts.length || mon.length) {
-        html += '<h2>Ventilator Settings (Hamilton T2)</h2>';
+        html += '<h2>Ventilator Settings (' + escapeHtml(val('ventModel') || 'Hamilton T1') + ')</h2>';
         if (parts.length) html += `<p>${escapeHtml(parts.join(' · '))}</p>`;
         if (mon.length) html += `<p><b>Measured:</b> ${escapeHtml(mon.join(' · '))}</p>`;
       }
