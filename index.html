@@ -600,6 +600,15 @@
   }
   .abg-row-head button:hover { background: #991b1b; }
 
+  /* Allergy quick-pick + entry wrapper */
+  .allergy-entry { margin-bottom: 8px; }
+  .allergy-entry .alg-pick { margin-bottom: 4px; }
+
+  /* In-flight timeline entry card */
+  .flight-entry { border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: #fff; }
+  .flight-entry .abg-row-head { margin-bottom: 6px; }
+  .flight-entry .sub-h { font-weight: 600; color: #0c4a6e; font-size: 12px; margin-top: 8px; }
+
   /* Photo thumbnail grid (license / face sheet / etc.) */
   .photo-thumbs {
     display: flex;
@@ -1861,6 +1870,19 @@
 
           <label>Patient Turnover — Helipad</label>
           <textarea id="cctTurnoverHelipad" rows="2" placeholder="Handoff on helipad to awaiting team: brief report, monitor transfer, continuity of drips."></textarea>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
+        <summary>In-Flight Timeline (timed entries → AI narrative)</summary>
+        <div class="fieldset-body">
+          <div class="hint">Add a timed entry for each in-flight event. Each entry captures vital signs, oxygen / delivery device, ventilator settings (with the reason a setting was changed and the result), IV push meds, IV drips (with titration, new rate, reason, and outcome), and comments. Generate a paragraph narrative per entry, then combine all entries into one narrative starting from first patient contact. Entries begin with the time.</div>
+          <div id="flightEntries"></div>
+          <button type="button" class="add-btn" style="margin-top:8px" onclick="addFlightEntry()">➕ Add timed entry</button>
+          <button type="button" class="generate-all" style="width:100%;margin-top:10px;background:#0c4a6e" id="flightCombineBtn" onclick="combineFlightNarrative()">📋 Combine all entries into one narrative (from first contact)</button>
+          <div id="flightCombinedOut" class="ai-out" style="margin-top:8px"></div>
         </div>
       </details>
     </fieldset>
@@ -3591,6 +3613,7 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
       meds: val('medsPTA'),
       drips: val('drips'),
       pushMeds: gatherPushMeds(),
+      flightTimeline: (typeof flightEntries !== 'undefined') ? flightEntries : [],
       rsi: val('rsi'),
       sedation: val('sedation'),
       vent: isVent ? { mode: val('vMode'), fio2: val('vFiO2'), tv: val('vTV'),
@@ -4313,19 +4336,44 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
   function attrEsc(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
   // ====== Allergies ======
   const ALLERGY_TYPES = ['Medication','Food','Environmental','Latex','Contrast','Insect/Sting','Other'];
+  const ALLERGY_MAX = 10;
+  const DRUG_ALLERGENS = [
+    'Penicillin', 'Amoxicillin', 'Ampicillin', 'Cephalosporins', 'Sulfa (sulfonamides)',
+    'Aspirin', 'NSAIDs (ibuprofen/naproxen)', 'Ketorolac (Toradol)',
+    'Codeine', 'Morphine', 'Fentanyl', 'Hydrocodone', 'Oxycodone', 'Hydromorphone (Dilaudid)', 'Tramadol', 'Meperidine (Demerol)',
+    'Iodinated contrast', 'Latex', 'Vancomycin', 'Ciprofloxacin / fluoroquinolones', 'Levofloxacin',
+    'Erythromycin / macrolides', 'Azithromycin', 'Clindamycin', 'Tetracycline / doxycycline', 'Metronidazole (Flagyl)',
+    'Heparin', 'Lidocaine', 'Lisinopril / ACE inhibitors', 'Statins', 'Metformin',
+    'Phenytoin', 'Carbamazepine', 'Lamotrigine', 'Allopurinol', 'Gabapentin',
+    'Ondansetron (Zofran)', 'Promethazine (Phenergan)', 'Succinylcholine', 'Rocuronium', 'Propofol (egg/soy)',
+  ];
   function addAllergyRow(data){
     data = data || {};
-    const div = document.createElement('div');
-    div.className = 'allergy-row';
+    if ($('allergyList').querySelectorAll('.allergy-entry').length >= ALLERGY_MAX) {
+      if (!data.allergen) { alert('Maximum ' + ALLERGY_MAX + ' allergies.'); return; }
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'allergy-entry';
     const opts = ALLERGY_TYPES.map(t => `<option value="${t}" ${data.type === t ? 'selected' : ''}>${t}</option>`).join('');
-    div.innerHTML = `
-      <input type="text" class="alg-name" placeholder="Allergen (e.g., Penicillin)" value="${attrEsc(data.allergen)}">
-      <select class="alg-type"><option value="">— Type —</option>${opts}</select>
-      <input type="text" class="alg-rxn" placeholder="Reaction (hives, anaphylaxis, GI…)" value="${attrEsc(data.reaction)}">
-      <button class="remove-btn" type="button" title="Remove">×</button>
-    `;
-    div.querySelector('.remove-btn').addEventListener('click', () => div.remove());
-    $('allergyList').appendChild(div);
+    const pick = DRUG_ALLERGENS.map(a => `<option value="${attrEsc(a)}">${a}</option>`).join('');
+    wrap.innerHTML = `
+      <select class="alg-pick" onchange="onAllergyPick(this)"><option value="">+ Common medication allergy…</option>${pick}<option value="__other">Other (type below)</option></select>
+      <div class="allergy-row">
+        <input type="text" class="alg-name" placeholder="Allergen (e.g., Penicillin)" value="${attrEsc(data.allergen)}">
+        <select class="alg-type"><option value="">— Type —</option>${opts}</select>
+        <input type="text" class="alg-rxn" placeholder="Reaction (hives, anaphylaxis, GI…)" value="${attrEsc(data.reaction)}">
+        <button class="remove-btn" type="button" title="Remove">×</button>
+      </div>`;
+    wrap.querySelector('.remove-btn').addEventListener('click', () => wrap.remove());
+    $('allergyList').appendChild(wrap);
+  }
+  function onAllergyPick(sel){
+    const wrap = sel.closest('.allergy-entry');
+    if (!wrap) return;
+    const name = wrap.querySelector('.alg-name'), type = wrap.querySelector('.alg-type');
+    if (sel.value === '__other') { name.value = ''; name.focus(); }
+    else if (sel.value) { name.value = sel.value; if (type) type.value = 'Medication'; }
+    sel.selectedIndex = 0;
   }
   function gatherAllergies(){
     const status = (document.querySelector('input[name=allergyStatus]:checked') || {}).value || 'has';
@@ -4518,10 +4566,12 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
     else if (sel.value) { nameInput.value = sel.value; }
     sel.selectedIndex = 0;
   }
+  const PUSH_MED_MAX = 30;
   function addPushMedRow(data){
     data = data || {};
     const wrap = $('pushMedRows');
     if (!wrap) return;
+    if (!data.name && !data.dose && wrap.querySelectorAll('.abg-row').length >= PUSH_MED_MAX) { alert('Maximum ' + PUSH_MED_MAX + ' IV push medications.'); return; }
     const div = document.createElement('div');
     div.className = 'abg-row';
     const n = wrap.querySelectorAll('.abg-row').length + 1;
@@ -4551,6 +4601,183 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
       time: v(div, '.pm-time'), by: v(div, '.pm-by'), notes: v(div, '.pm-notes'),
     })).filter(m => m.name || m.dose);
   }
+
+  // ====== In-Flight Timeline (timed entries) ======
+  const FLIGHT_MAX = 30;
+  const ENTRY_MED_MAX = 20;
+  let flightEntries = []; // [{id,time,vitals,oxygen,vent,pushMeds:[],drips:[],comment,narrative}]
+  let flightCombinedText = '';
+  const O2_DELIVERY = ['Room air', 'Nasal cannula', 'Simple face mask', 'Non-rebreather mask', 'Venturi mask', 'High-flow nasal cannula (HFNC)', 'CPAP', 'BiPAP', 'Bag-valve mask (BVM / Ambu)', 'Mechanical ventilator', 'Blow-by', 'Tracheostomy collar'];
+  const TITRATION = ['Started', 'Increased (titrated up)', 'Decreased (titrated down)', 'Unchanged', 'Bolus', 'Discontinued'];
+  const COMMENT_CANNED = [
+    'Continue to monitor the patient for signs of distress and worsening condition.',
+    'Patient tolerated the intervention without complication.',
+    'No change in patient condition; continued current management.',
+    'Patient remained hemodynamically stable throughout.',
+    'Reassessed after the intervention with improvement noted.',
+    'Notified medical control / accepting physician of the change.',
+  ];
+  const DRIP_GROUPS = {
+    'Vasopressors / Inotropes': ['Norepinephrine (Levophed)', 'Epinephrine', 'Phenylephrine (Neo-Synephrine)', 'Vasopressin', 'Dopamine', 'Dobutamine', 'Milrinone', 'Angiotensin II (Giapreza)'],
+    'Sedation / Analgesia': ['Propofol', 'Dexmedetomidine (Precedex)', 'Midazolam (Versed)', 'Ketamine', 'Fentanyl', 'Hydromorphone (Dilaudid)', 'Morphine', 'Remifentanil'],
+    'Paralytics': ['Cisatracurium (Nimbex)', 'Rocuronium', 'Vecuronium'],
+    'Antiarrhythmic / Cardiac': ['Amiodarone', 'Lidocaine', 'Diltiazem (Cardizem)', 'Esmolol', 'Procainamide'],
+    'Antihypertensive / Vasodilator': ['Nitroglycerin', 'Nicardipine (Cardene)', 'Nitroprusside', 'Clevidipine (Cleviprex)', 'Labetalol'],
+    'Anticoagulant': ['Heparin', 'Bivalirudin', 'Argatroban'],
+    'Other': ['Insulin', 'Magnesium sulfate', 'Sodium bicarbonate', 'Tranexamic acid (TXA)', 'Levetiracetam (Keppra)', 'Mannitol', 'Hypertonic saline 3%', 'Calcium gluconate', 'Potassium chloride (KCl)', 'Furosemide (Lasix)', 'Octreotide'],
+  };
+  function buildDripOptions(){
+    let html = '<option value="">— Drip —</option>';
+    Object.keys(DRIP_GROUPS).forEach(g => { html += `<optgroup label="${g}">` + DRIP_GROUPS[g].map(m => `<option value="${attrEsc(m)}">${m}</option>`).join('') + '</optgroup>'; });
+    html += '<optgroup label="Other"><option value="__other">Other (type name)</option></optgroup>';
+    return html;
+  }
+  function optList(arr, sel){ return ['', ...arr].map(o => `<option value="${attrEsc(o)}" ${o === sel ? 'selected' : ''}>${o || '—'}</option>`).join(''); }
+  function fdSet(obj, path, value){ const ks = path.split('.'); let o = obj; for (let i = 0; i < ks.length - 1; i++) { o[ks[i]] = o[ks[i]] || {}; o = o[ks[i]]; } o[ks[ks.length - 1]] = value; }
+  function flightById(id){ return flightEntries.find(e => e.id === id); }
+  function newFlightId(){ return 'fe' + Date.now() + Math.floor(Math.random() * 1000); }
+  function updFlight(id, path, value){ const e = flightById(id); if (e) fdSet(e, path, value); }
+  function addFlightEntry(data){
+    if (!data && flightEntries.length >= FLIGHT_MAX) { alert('Maximum ' + FLIGHT_MAX + ' timed entries.'); return; }
+    const e = data || { time: nowHHMM ? nowHHMM() : '', vitals: {}, oxygen: {}, vent: {}, pushMeds: [], drips: [], comment: '', narrative: '' };
+    if (!e.id) e.id = newFlightId();
+    e.vitals = e.vitals || {}; e.oxygen = e.oxygen || {}; e.vent = e.vent || {}; e.pushMeds = e.pushMeds || []; e.drips = e.drips || [];
+    flightEntries.push(e);
+    renderFlightEntries();
+  }
+  function removeFlightEntry(id){ if (!confirm('Remove this timed entry?')) return; flightEntries = flightEntries.filter(e => e.id !== id); renderFlightEntries(); }
+  function addFlightMed(id){ const e = flightById(id); if (!e) return; if (e.pushMeds.length >= ENTRY_MED_MAX) { alert('Max ' + ENTRY_MED_MAX + ' push meds per entry.'); return; } e.pushMeds.push({ name: '', dose: '', route: 'IVP', notes: '' }); renderFlightEntries(); }
+  function updFlightMed(id, idx, field, value){ const e = flightById(id); if (e && e.pushMeds[idx]) e.pushMeds[idx][field] = value; }
+  function removeFlightMed(id, idx){ const e = flightById(id); if (e) { e.pushMeds.splice(idx, 1); renderFlightEntries(); } }
+  function onFlightMedPick(sel, id, idx){ if (sel.value && sel.value !== '__other') updFlightMed(id, idx, 'name', sel.value); else if (sel.value === '__other') updFlightMed(id, idx, 'name', ''); renderFlightEntries(); }
+  function addFlightDrip(id){ const e = flightById(id); if (!e) return; if (e.drips.length >= ENTRY_MED_MAX) { alert('Max ' + ENTRY_MED_MAX + ' drips per entry.'); return; } e.drips.push({ name: '', conc: '', titration: '', rate: '', reason: '', outcome: '' }); renderFlightEntries(); }
+  function updFlightDrip(id, idx, field, value){ const e = flightById(id); if (e && e.drips[idx]) e.drips[idx][field] = value; }
+  function removeFlightDrip(id, idx){ const e = flightById(id); if (e) { e.drips.splice(idx, 1); renderFlightEntries(); } }
+  function onFlightDripPick(sel, id, idx){ if (sel.value && sel.value !== '__other') updFlightDrip(id, idx, 'name', sel.value); else if (sel.value === '__other') updFlightDrip(id, idx, 'name', ''); renderFlightEntries(); }
+  function applyCanned(id, text){ if (!text) return; const e = flightById(id); if (!e) return; e.comment = (e.comment ? e.comment.replace(/\s*$/, '') + ' ' : '') + text; const ta = document.getElementById('fnComment_' + id); if (ta) ta.value = e.comment; }
+  function renderFlightEntries(){
+    const wrap = $('flightEntries');
+    if (!wrap) return;
+    if (!flightEntries.length) { wrap.innerHTML = '<p class="hint">No timed entries yet. Click “➕ Add timed entry”.</p>'; return; }
+    wrap.innerHTML = flightEntries.map((e, i) => {
+      const v = e.vitals || {}, o = e.oxygen || {}, vt = e.vent || {};
+      const meds = (e.pushMeds || []).map((m, mi) => `
+        <div class="row-4" style="margin-top:4px">
+          <div><select onchange="onFlightMedPick(this,'${e.id}',${mi})">${buildPushMedOptions()}</select></div>
+          <div><input type="text" placeholder="Medication" value="${attrEsc(m.name)}" onchange="updFlightMed('${e.id}',${mi},'name',this.value)"></div>
+          <div><input type="text" placeholder="Dose" value="${attrEsc(m.dose)}" onchange="updFlightMed('${e.id}',${mi},'dose',this.value)"></div>
+          <div style="display:flex;gap:4px"><input type="text" placeholder="Route" value="${attrEsc(m.route || 'IVP')}" onchange="updFlightMed('${e.id}',${mi},'route',this.value)"><button type="button" class="remove-btn" onclick="removeFlightMed('${e.id}',${mi})">×</button></div>
+        </div>
+        <div><input type="text" placeholder="Response / notes" value="${attrEsc(m.notes)}" onchange="updFlightMed('${e.id}',${mi},'notes',this.value)" style="margin-top:2px"></div>`).join('');
+      const drips = (e.drips || []).map((d, di) => `
+        <div class="row-4" style="margin-top:4px">
+          <div><select onchange="onFlightDripPick(this,'${e.id}',${di})">${buildDripOptions()}</select></div>
+          <div><input type="text" placeholder="Drug" value="${attrEsc(d.name)}" onchange="updFlightDrip('${e.id}',${di},'name',this.value)"></div>
+          <div><input type="text" placeholder="Concentration" value="${attrEsc(d.conc)}" onchange="updFlightDrip('${e.id}',${di},'conc',this.value)"></div>
+          <div><select onchange="updFlightDrip('${e.id}',${di},'titration',this.value)">${optList(TITRATION, d.titration)}</select></div>
+        </div>
+        <div class="row-3" style="margin-top:2px">
+          <div><input type="text" placeholder="New rate" value="${attrEsc(d.rate)}" onchange="updFlightDrip('${e.id}',${di},'rate',this.value)"></div>
+          <div><input type="text" placeholder="Reason for change" value="${attrEsc(d.reason)}" onchange="updFlightDrip('${e.id}',${di},'reason',this.value)"></div>
+          <div style="display:flex;gap:4px"><input type="text" placeholder="Outcome" value="${attrEsc(d.outcome)}" onchange="updFlightDrip('${e.id}',${di},'outcome',this.value)"><button type="button" class="remove-btn" onclick="removeFlightDrip('${e.id}',${di})">×</button></div>
+        </div>`).join('');
+      return `<div class="flight-entry">
+        <div class="abg-row-head"><span>⏱ Entry ${i + 1}${e.time ? (' — ' + escapeHtml(e.time)) : ''}</span><button type="button" onclick="removeFlightEntry('${e.id}')">×</button></div>
+        <div class="row-3">
+          <div><label>Time</label><input type="time" value="${attrEsc(e.time)}" onchange="updFlight('${e.id}','time',this.value);renderFlightEntries()"></div>
+          <div><label>O₂ delivery</label><select onchange="updFlight('${e.id}','oxygen.device',this.value)">${optList(O2_DELIVERY, o.device)}</select></div>
+          <div><label>O₂ flow / FiO₂</label><input type="text" placeholder="e.g., 15 L/min, 100%" value="${attrEsc(o.flow)}" onchange="updFlight('${e.id}','oxygen.flow',this.value)"></div>
+        </div>
+        <div class="sub-h">Vital signs</div>
+        <div class="row-4">
+          <div><label>BP</label><input type="text" placeholder="120/80" value="${attrEsc(v.bp)}" onchange="updFlight('${e.id}','vitals.bp',this.value)"></div>
+          <div><label>HR</label><input type="text" value="${attrEsc(v.hr)}" onchange="updFlight('${e.id}','vitals.hr',this.value)"></div>
+          <div><label>RR</label><input type="text" value="${attrEsc(v.rr)}" onchange="updFlight('${e.id}','vitals.rr',this.value)"></div>
+          <div><label>SpO₂</label><input type="text" value="${attrEsc(v.spo2)}" onchange="updFlight('${e.id}','vitals.spo2',this.value)"></div>
+        </div>
+        <div class="row-3">
+          <div><label>EtCO₂</label><input type="text" value="${attrEsc(v.etco2)}" onchange="updFlight('${e.id}','vitals.etco2',this.value)"></div>
+          <div><label>Temp</label><input type="text" value="${attrEsc(v.temp)}" onchange="updFlight('${e.id}','vitals.temp',this.value)"></div>
+          <div><label>Rhythm</label><input type="text" value="${attrEsc(v.rhythm)}" onchange="updFlight('${e.id}','vitals.rhythm',this.value)"></div>
+        </div>
+        <div class="sub-h">Ventilator settings</div>
+        <div class="row-4">
+          <div><label>Mode</label><input type="text" value="${attrEsc(vt.mode)}" onchange="updFlight('${e.id}','vent.mode',this.value)"></div>
+          <div><label>FiO₂</label><input type="text" value="${attrEsc(vt.fio2)}" onchange="updFlight('${e.id}','vent.fio2',this.value)"></div>
+          <div><label>Vt</label><input type="text" value="${attrEsc(vt.vt)}" onchange="updFlight('${e.id}','vent.vt',this.value)"></div>
+          <div><label>Rate</label><input type="text" value="${attrEsc(vt.rate)}" onchange="updFlight('${e.id}','vent.rate',this.value)"></div>
+        </div>
+        <div class="row-4">
+          <div><label>PEEP</label><input type="text" value="${attrEsc(vt.peep)}" onchange="updFlight('${e.id}','vent.peep',this.value)"></div>
+          <div><label>PS</label><input type="text" value="${attrEsc(vt.ps)}" onchange="updFlight('${e.id}','vent.ps',this.value)"></div>
+          <div style="grid-column:span 2"><label>Reason vent setting changed</label><input type="text" value="${attrEsc(vt.changeReason)}" onchange="updFlight('${e.id}','vent.changeReason',this.value)"></div>
+        </div>
+        <div><label>Result of vent change</label><input type="text" value="${attrEsc(vt.changeResult)}" onchange="updFlight('${e.id}','vent.changeResult',this.value)"></div>
+        <div class="sub-h">IV push medications</div>
+        ${meds}
+        <button type="button" class="calc-btn" style="width:auto;margin-top:4px" onclick="addFlightMed('${e.id}')">➕ push med</button>
+        <div class="sub-h">IV drips (titration)</div>
+        ${drips}
+        <button type="button" class="calc-btn" style="width:auto;margin-top:4px" onclick="addFlightDrip('${e.id}')">➕ drip</button>
+        <div class="sub-h">Comment</div>
+        <textarea id="fnComment_${e.id}" rows="2" placeholder="Free text…" onchange="updFlight('${e.id}','comment',this.value)">${escapeHtml(e.comment || '')}</textarea>
+        <select onchange="applyCanned('${e.id}',this.value);this.selectedIndex=0" style="margin-top:4px">
+          <option value="">+ Insert standard comment…</option>
+          ${COMMENT_CANNED.map(c => `<option value="${attrEsc(c)}">${c}</option>`).join('')}
+        </select>
+        <button type="button" class="calc-btn" id="fnBtn_${e.id}" style="width:100%;margin-top:8px" onclick="generateFlightEntryNarrative('${e.id}')">🤖 Generate entry narrative</button>
+        <div id="fnNarr_${e.id}" class="ai-out ${e.narrative ? 'show' : ''}">${e.narrative ? '<strong>Entry narrative</strong><br>' + formatAiText(e.narrative) : ''}</div>
+      </div>`;
+    }).join('');
+  }
+  async function generateFlightEntryNarrative(id){
+    const settings = loadSettings();
+    if (!settings.anthropic) { alert('Anthropic API key required. Open Settings to add one.'); openSettings(); return; }
+    const e = flightById(id); if (!e) return;
+    const btn = document.getElementById('fnBtn_' + id), out = document.getElementById('fnNarr_' + id);
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Generating…'; }
+    if (out) { out.classList.add('show'); out.innerHTML = '<span class="spinner"></span> Generating entry narrative…'; }
+    const prompt = `You are a critical-care flight nurse documenting ONE timed in-flight event during a HEMS transport. Write a clear, professional clinical paragraph (past tense, factual) describing this event. BEGIN the paragraph with the time. Use ONLY the data provided; do not invent values.
+Timed entry data:
+${JSON.stringify(e, null, 2)}
+Guidance: weave in the vital signs, the oxygen/airway delivery device and flow, any ventilator setting change WITH the stated reason and the result, each IV push medication (drug, dose, route, response), and each IV drip (drug, concentration, titration direction, new rate, the reason for the change, and the outcome). If a ventilator or drip change is present, clearly state why it was made and what the end result was. Incorporate the comment. Return ONLY the paragraph text.`;
+    try {
+      const resp = await callAnthropic(prompt);
+      e.narrative = resp.trim();
+      if (out) out.innerHTML = '<strong>Entry narrative</strong> <button type="button" class="calc-btn" style="width:auto" onclick="copyFlightNarr(\'' + id + '\')">Copy</button><br>' + formatAiText(e.narrative);
+    } catch (err) {
+      if (out) out.innerHTML = 'Generation failed: ' + escapeHtml(err.message || String(err));
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '🤖 Generate entry narrative'; }
+    }
+  }
+  function copyFlightNarr(id){ const e = flightById(id); if (e && e.narrative && navigator.clipboard) navigator.clipboard.writeText(e.narrative); }
+  async function combineFlightNarrative(){
+    const settings = loadSettings();
+    if (!settings.anthropic) { alert('Anthropic API key required. Open Settings to add one.'); openSettings(); return; }
+    if (!flightEntries.length) { alert('Add at least one timed entry first.'); return; }
+    const data = gatherAllData();
+    const entries = flightEntries.slice().sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+    const btn = $('flightCombineBtn'), out = $('flightCombinedOut');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Combining…';
+    out.classList.add('show'); out.innerHTML = '<span class="spinner"></span> Building combined in-flight narrative…';
+    const prompt = `You are a critical-care flight crew documentarian. Using the chart data and the chronological list of timed in-flight entries, write ONE clear, flowing clinical narrative in paragraph form (past tense, factual) documenting the transport STARTING FROM FIRST PATIENT CONTACT and proceeding through each timed event in order. Each timed event should read as its own paragraph beginning with the time. For every ventilator or drip change, state the reason it was made and the resulting effect. Do not invent data; omit anything not provided.
+INITIAL CONTACT / CHART DATA:
+${JSON.stringify({ unit: data.statFlight, aircraft: data.aircraft, sending: data.sending, receiving: data.receiving, patient: data.patient, diagnosis: data.diagnosis, initialVitals: data.vitals, baselineVent: data.vent, baselineDrips: data.drips, pushMeds: data.pushMeds, ivAccess: data.ivs }, null, 2)}
+CHRONOLOGICAL TIMED ENTRIES:
+${JSON.stringify(entries, null, 2)}
+Return ONLY the narrative text.`;
+    try {
+      const resp = await callAnthropic(prompt);
+      flightCombinedText = resp.trim();
+      out.innerHTML = '<strong>Combined in-flight narrative</strong> <button type="button" class="calc-btn" style="width:auto" onclick="copyFlightCombined()">Copy</button><br>' + formatAiText(flightCombinedText);
+    } catch (err) {
+      out.innerHTML = 'Combine failed: ' + escapeHtml(err.message || String(err));
+    } finally {
+      btn.disabled = false; btn.innerHTML = '📋 Combine all entries into one narrative (from first contact)';
+    }
+  }
+  function copyFlightCombined(){ if (flightCombinedText && navigator.clipboard) navigator.clipboard.writeText(flightCombinedText); }
 
   // ====== ABG/VBG quick interpretation ======
   function interpretGas(){
@@ -5363,6 +5590,7 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('clinicalInterp')) $('clinicalInterp').innerHTML = '<span class="empty">Click the button above to get an AI clinical interpretation.</span>';
     if ($('labRows')) $('labRows').innerHTML = '';
     if ($('pushMedRows')) $('pushMedRows').innerHTML = '';
+    if (typeof flightEntries !== 'undefined') { flightEntries.length = 0; if (typeof renderFlightEntries === 'function') renderFlightEntries(); }
     if ($('vitalsTrendRows')) $('vitalsTrendRows').innerHTML = '';
     if ($('ocrVitalsStatus')) $('ocrVitalsStatus').textContent = '';
     if ($('bgInterp')) $('bgInterp').classList.remove('show');
@@ -5420,6 +5648,7 @@ ${JSON.stringify(data, null, 2)}`;
       allergies: gatherAllergies(),
       labs: gatherLabRows(),
       pushMeds: (typeof gatherPushMeds === 'function') ? gatherPushMeds() : [],
+      flight: (typeof flightEntries !== 'undefined') ? JSON.parse(JSON.stringify(flightEntries)) : [],
       abgs: (typeof serialAbgs !== 'undefined') ? serialAbgs.slice() : [],
       vitalsTrend: (typeof gatherVitalsTrend === 'function') ? gatherVitalsTrend() : [],
       inflightLog: (typeof inflightLogData !== 'undefined') ? inflightLogData.slice() : [],
@@ -5459,6 +5688,7 @@ ${JSON.stringify(data, null, 2)}`;
       }
       if ($('labRows')) { $('labRows').innerHTML = ''; (s.labs || []).forEach(l => addLabRow(l)); }
       if ($('pushMedRows') && typeof addPushMedRow === 'function') { $('pushMedRows').innerHTML = ''; (s.pushMeds || []).forEach(m => addPushMedRow(m)); }
+      if (typeof flightEntries !== 'undefined') { flightEntries.length = 0; (s.flight || []).forEach(e => flightEntries.push(e)); if (typeof renderFlightEntries === 'function') renderFlightEntries(); }
       if ($('vitalsTrendRows') && typeof addVitalsTrendRow === 'function') {
         $('vitalsTrendRows').innerHTML = ''; (s.vitalsTrend || []).forEach(v => addVitalsTrendRow(v));
       }
@@ -5636,7 +5866,7 @@ ${JSON.stringify(data, null, 2)}`;
     } catch (e) { /* ignore corrupt autosave */ }
   }
   // Defer until the whole script has finished initializing the form
-  setTimeout(initSaveSystem, 0);
+  setTimeout(() => { if (typeof renderFlightEntries === 'function') renderFlightEntries(); initSaveSystem(); }, 0);
 
   // ====== Hospital address auto-fill ======
   const HOSPITAL_ADDRESSES = {
