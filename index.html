@@ -6350,6 +6350,36 @@ ${JSON.stringify(data, null, 2)}`;
     reader.readAsText(file);
   }
 
+  // ====== Cross-app handoff (Adult CCT app -> Flight Builder, same-origin localStorage) ======
+  function checkHandoff(){
+    let raw; try { raw = localStorage.getItem('hp_handoff'); } catch (e) { return; }
+    if (!raw) return;
+    let h; try { h = JSON.parse(raw); } catch (e) { localStorage.removeItem('hp_handoff'); return; }
+    localStorage.removeItem('hp_handoff'); // one-shot
+    if (!h || !h.ts || (Date.now() - h.ts) > 30 * 60 * 1000) return; // expire after 30 min
+    const bits = [];
+    if (h.age) bits.push('age ' + h.age);
+    if (h.sex) bits.push(h.sex);
+    if (h.weightKg) bits.push(h.weightKg + ' kg');
+    if (h.dx) bits.push(h.dx);
+    if (!confirm('Import patient data from the Adult CCT app' + (bits.length ? ' (' + bits.join(', ') + ')' : '') + '?\n\nFills age, sex, weight, height, HR, SBP, chief complaint, and IBW / tidal-volume suggestions. Existing entries in those fields will be overwritten.')) return;
+    const setIfHave = (id, v) => { if (v != null && v !== '' && $(id)) $(id).value = v; };
+    setIfHave('ptAge', h.age);
+    if (h.sex && $('ptSex')) $('ptSex').value = (h.sex === 'F' ? 'Female' : (h.sex === 'M' ? 'Male' : ''));
+    if (h.weightKg) setIfHave('ptWeight', h.weightKg + ' kg');
+    if (h.heightCm) setIfHave('ptHeight', Math.round(h.heightCm) + ' cm');
+    setIfHave('vsHR', h.hr);
+    if (h.sbp) setIfHave('vsBP', h.sbp + '/');   // SBP only from the Adult app; complete the diastolic
+    setIfHave('cc', h.dx);
+    if (h.ibw) setIfHave('vIBW', Math.round(h.ibw) + ' kg');
+    if (h.tidalVolume) setIfHave('vTV', h.tidalVolume);
+    if (typeof updateHeightConv === 'function') updateHeightConv();
+    if (typeof updateWeightConv === 'function') updateWeightConv();
+    if (typeof doAutosave === 'function') doAutosave();
+    setStatus('Imported patient data from the Adult CCT app. Review and complete the chart.');
+    setTimeout(() => setStatus(''), 4000);
+  }
+
   function initSaveSystem(){
     document.addEventListener('input', scheduleAutosave, true);
     document.addEventListener('change', scheduleAutosave, true);
@@ -6366,7 +6396,7 @@ ${JSON.stringify(data, null, 2)}`;
     } catch (e) { /* ignore corrupt autosave */ }
   }
   // Defer until the whole script has finished initializing the form
-  setTimeout(() => { if (typeof renderFlightEntries === 'function') renderFlightEntries(); initSaveSystem(); }, 0);
+  setTimeout(() => { if (typeof renderFlightEntries === 'function') renderFlightEntries(); initSaveSystem(); if (typeof checkHandoff === 'function') checkHandoff(); }, 0);
 
   // ====== Hospital address auto-fill ======
   const HOSPITAL_ADDRESSES = {
