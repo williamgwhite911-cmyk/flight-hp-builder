@@ -5792,6 +5792,10 @@ ${JSON.stringify(data, null, 2)}`;
       $('combinedOut').textContent = 'Fill in the chart above, then click to combine everything into one complete paragraph.';
       $('combinedOut').classList.remove('polished');
     }
+    if ($('camts11Out')) {
+      $('camts11Out').textContent = 'Fill in the chart above, then click to generate the 11-paragraph flight narrative.';
+      $('camts11Out').classList.remove('polished');
+    }
     $('complianceList').innerHTML = '';
     $('distanceCard').style.display = 'none';
     if ($('mapCard')) { $('mapCard').style.display = 'none'; $('routeMap').src = 'about:blank'; }
@@ -5867,7 +5871,7 @@ ${JSON.stringify(data, null, 2)}`;
       vitalsTrend: (typeof gatherVitalsTrend === 'function') ? gatherVitalsTrend() : [],
       inflightLog: (typeof inflightLogData !== 'undefined') ? inflightLogData.slice() : [],
       dx: dxSelected.slice(),
-      outputs: { narrative: out('narrativeOut'), template: out('templateOut'), cct: out('cctOut'), combined: out('combinedOut') },
+      outputs: { narrative: out('narrativeOut'), template: out('templateOut'), cct: out('cctOut'), combined: out('combinedOut'), camts11: out('camts11Out') },
     };
   }
 
@@ -5929,7 +5933,7 @@ ${JSON.stringify(data, null, 2)}`;
       const setOut = (id, o) => { const el = $(id); if (el && o) { el.textContent = o.text; el.classList.toggle('polished', !!o.polished); } };
       if (s.outputs) {
         setOut('narrativeOut', s.outputs.narrative); setOut('templateOut', s.outputs.template);
-        setOut('cctOut', s.outputs.cct); setOut('combinedOut', s.outputs.combined);
+        setOut('cctOut', s.outputs.cct); setOut('combinedOut', s.outputs.combined); setOut('camts11Out', s.outputs.camts11);
       }
       if (typeof interpretGas === 'function') interpretGas();
       if (typeof checkCuff === 'function') checkCuff();
@@ -6006,7 +6010,7 @@ ${JSON.stringify(data, null, 2)}`;
       each(e.drips, ['name', 'titration', 'reason', 'outcome']);
     });
     const out = s.outputs || {};
-    ['narrative', 'template', 'cct', 'combined'].forEach(k => { if (out[k] && out[k].text) parts.push(out[k].text); });
+    ['narrative', 'template', 'cct', 'combined', 'camts11'].forEach(k => { if (out[k] && out[k].text) parts.push(out[k].text); });
     return parts.filter(Boolean).join(' ').toLowerCase();
   }
   function openLog(){ renderLog(); $('logModal').classList.add('show'); }
@@ -6022,7 +6026,7 @@ ${JSON.stringify(data, null, 2)}`;
     if (!filtered.length) { wrap.innerHTML = '<p class="hint">No records match “' + escapeHtml(q) + '”.</p>'; return; }
     wrap.innerHTML = filtered.map(r => {
       const o = (r.state && r.state.outputs) || {};
-      const n = ['narrative', 'template', 'cct', 'combined'].filter(k => isRealNarr(o[k])).length;
+      const n = ['narrative', 'template', 'cct', 'combined', 'camts11'].filter(k => isRealNarr(o[k])).length;
       const oca = recOca(r), cd = recChartDate(r);
       const meta = [];
       if (oca) meta.push('OCA ' + escapeHtml(oca));
@@ -6048,7 +6052,7 @@ ${JSON.stringify(data, null, 2)}`;
     if (box.style.display === 'block') { box.style.display = 'none'; return; }
     const rec = loadRecords().find(r => r.id === id); if (!rec) return;
     const o = (rec.state && rec.state.outputs) || {};
-    const secs = [['Narrative', 'narrative'], ['Template', 'template'], ['CCT Report', 'cct'], ['Combined narrative', 'combined']];
+    const secs = [['Narrative', 'narrative'], ['Template', 'template'], ['CCT Report', 'cct'], ['Combined narrative', 'combined'], ['11-Paragraph CCT Narrative', 'camts11']];
     let html = '';
     secs.forEach(([title, key]) => {
       if (isRealNarr(o[key])) {
@@ -6696,6 +6700,7 @@ ${transcript}`;
     const narrative = $('narrativeOut').textContent.trim();
     const template = $('templateOut').textContent.trim();
     const cctText = $('cctOut') ? $('cctOut').textContent.trim() : '';
+    const camts11Text = $('camts11Out') ? $('camts11Out').textContent.trim() : '';
     const interpText = $('clinicalInterp') ? $('clinicalInterp').textContent.trim() : '';
 
     // ----- Compose face sheet -----
@@ -6845,6 +6850,16 @@ ${transcript}`;
         return line;
       }).join('<br>');
       html += `<p>${cctHtml}</p>`;
+    }
+    if (camts11Text && !camts11Text.startsWith('Fill in the chart')) {
+      html += '<h2>11-Paragraph CCT Flight Narrative (CAMTS)</h2>';
+      const c11Html = escapeHtml(camts11Text).split('\n').map(line => {
+        const t = line.trim();
+        // Bold the paragraph headers and the closing required-info header
+        if (/^PARAGRAPH\s+\d+\s+/i.test(t) || /^INFORMATION REQUIRED/i.test(t)) return '<b>' + line + '</b>';
+        return line;
+      }).join('<br>');
+      html += `<p>${c11Html}</p>`;
     }
 
     // Bedside snapshot — vitals + assessment
