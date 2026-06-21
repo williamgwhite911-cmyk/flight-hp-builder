@@ -2001,6 +2001,13 @@
       <div class="hint" style="margin-bottom:8px">Pulls every field you've filled in — demographics, transport, diagnosis, history, vitals, labs, vent, meds, distances, and the critical-care transport details — into one complete flowing narrative.</div>
       <div class="narrative" id="combinedOut" contenteditable="true">Fill in the chart above, then click to combine everything into one complete paragraph.</div>
     </div>
+
+    <div class="output-card">
+      <h3>11-Paragraph CCT Flight Narrative (CAMTS) <button class="copy-narrative" style="font-size:11px;padding:6px 10px" onclick="copyText('camts11Out', this)" type="button">Copy</button></h3>
+      <button class="generate-all" style="width:100%;margin-bottom:8px;background:#0c4a6e" onclick="generateCamts11()" id="camts11Btn" type="button">📄 Generate 11-Paragraph Flight Narrative</button>
+      <div class="hint" style="margin-bottom:8px">Generates a complete legal-quality critical-care transport narrative in the fixed 11-paragraph CAMTS format from every field, photo-extracted value, and timeline entry you've entered. Uses only your data — never invents — and flags any missing element as <b>🚩 REQUIRED</b> with a request.</div>
+      <div class="narrative" id="camts11Out" contenteditable="true">Fill in the chart above, then click to generate the 11-paragraph flight narrative.</div>
+    </div>
   </div>
 </div>
 
@@ -5546,6 +5553,66 @@ ${JSON.stringify(data, null, 2)}`;
       btn.disabled = false;
       btn.innerHTML = '📋 Combine ALL Info Into One Complete Paragraph';
       setStatus('Combine failed: ' + (err.message || err), true);
+    }
+  }
+
+  // ====== 11-Paragraph CCT Flight Narrative (CAMTS format) ======
+  async function generateCamts11(){
+    const settings = loadSettings();
+    if (!settings.anthropic) {
+      setStatus('Anthropic API key required. Open Settings to add one.', true);
+      openSettings();
+      return;
+    }
+    const data = gatherAllData();
+    const cct = gatherCCT();
+    const btn = $('camts11Btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Generating…';
+    setStatus('<span class="spinner"></span>Generating 11-paragraph flight narrative…');
+    try {
+      const prompt = `You are a critical-care flight crew documentarian. Using ONLY the source data provided at the end, generate a complete, legal-quality critical care interfacility flight transport narrative in the EXACT fixed 11-paragraph format below — the same structure every time. The narrative must be suitable for CAMTS review, insurance review, hospital quality review, and medical-legal documentation.
+
+OUTPUT RULES (follow strictly):
+- Output exactly 11 numbered paragraphs, in this order, each beginning with its header line exactly as written (e.g., "PARAGRAPH 1 — TRANSPORT REQUEST AND ACCEPTANCE").
+- Write each paragraph as complete, professional medical narrative prose. Do NOT use bullet points within the narrative. No markdown, no code fences.
+- Write in chronological order. Avoid duplicate information — do not repeat the same finding in multiple paragraphs. Include only clinically relevant information.
+- Use exact values, exact times (as documented), and provider names/credentials whenever they are present in the data. Include pertinent positives AND negatives.
+- CRITICAL: Use ONLY the actual data provided. NEVER invent, infer, estimate, or fabricate any value, name, time, vital sign, medication, finding, distance, or event. If something is clinically inferable from medications (e.g., home anticoagulants implying a condition), you may note it as "suggested by the medication list" but must not state it as confirmed.
+- If information required by a paragraph is NOT present in the source data, do NOT omit the paragraph silently. Instead, write the paragraph with whatever IS documented, then on a new line within that paragraph add a flag in this exact form: "🚩 REQUIRED: <list the specific missing items the paragraph needs>." If a whole paragraph's content is absent (common for the in-flight, offload, and handoff phases when only pre-transport records were provided), state plainly that the phase is not documented in the source and add the 🚩 REQUIRED line listing what is needed.
+- After the 11 paragraphs, add a final section header "INFORMATION REQUIRED TO COMPLETE THIS CHART" followed by a consolidated numbered list of every missing item flagged above.
+- If two sources conflict (e.g., a verbal handoff vs a printed MAR), treat the printed/official document as authoritative and add a "🚩 RECONCILE:" note describing the conflict.
+
+THE 11 PARAGRAPHS:
+PARAGRAPH 1 — TRANSPORT REQUEST AND ACCEPTANCE. Flight program/unit; referring provider name + credentials; sending hospital; receiving hospital; receiving physician + specialty; patient age and gender; primary diagnoses; reason for transfer; specialty services unavailable at the sending facility. Describe why the patient requires transfer and what higher level of care the receiving facility provides.
+PARAGRAPH 2 — BEDSIDE REPORT AND PATIENT PRESENTATION. Name/title of person giving report; chief complaint; history of present illness; relevant past medical history; events leading to hospitalization; initial presentation; clinical condition at flight-crew arrival, including mental status, general appearance, major symptoms, and overall severity.
+PARAGRAPH 3 — DIAGNOSTIC STUDIES. All significant labs (CBC, CMP, coagulation studies, cardiac markers, ABG/VBG, lactate, cultures, toxicology, and any abnormal values) and radiology (CT, MRI, ultrasound, X-ray, echocardiography, other). Summarize only clinically relevant findings and explain their significance where appropriate. Include the EKG interpretation if present.
+PARAGRAPH 4 — FLIGHT CREW ASSESSMENT. Complete head-to-toe: general appearance; neurologic findings; pupils; airway status; if intubated — ET tube size, depth, and cuff pressure and ventilator settings; breath sounds; cardiac; abdominal; skin; extremities. All tubes/devices (OG/NG tube, Foley, chest tubes, drains, ICP monitors, specialty devices). Vascular access (peripheral IVs, midlines, PICC, central lines, arterial lines, IO). All continuous infusions/drips with rates.
+PARAGRAPH 5 — MEDICAL NECESSITY AND AIR TRANSPORT JUSTIFICATION. Why helicopter transport was required and ground transport inappropriate; risk of deterioration during prolonged transport; specialty care required. Include ground mileage from sending to receiving facility, estimated ground transport time in minutes, actual air transport time in minutes, and the time savings in minutes; explain how air transport benefited the patient.
+PARAGRAPH 6 — TRANSFER TO FLIGHT STRETCHER. Coordination between hospital staff and flight crew; transfer method (sheet/patient-mover); securing of all tubes/lines/drains/monitoring; transition of monitoring devices and infusion pumps; no interruption of care; no dislodgement; patient tolerated transfer.
+PARAGRAPH 7 — AIRCRAFT LOADING. Hot vs cold load; movement to the aircraft; continuous monitoring/ventilator/infusions maintained; stretcher locking device and restraint secured; equipment safety checks; patient tolerance.
+PARAGRAPH 8 — IN-FLIGHT ASSESSMENT AND TREATMENT. Continuous reassessments; vital-sign trends; cardiac rhythm; ventilator monitoring; oxygenation; hemodynamic and neurologic status; medication administration/titrations; ventilator changes; procedures/treatments; any significant clinical changes. Use the chronological in-flight timeline entries (each with its time) when present.
+PARAGRAPH 9 — RADIO REPORT TO RECEIVING FACILITY. Time radio contact made; receiving facility; update/current status/treatments relayed; receiving team's response; any questions, requests, or additional orders.
+PARAGRAPH 10 — AIRCRAFT OFFLOAD. Hot vs cold offload; personnel meeting the aircraft; safe removal with continuous monitoring/ventilator/infusions maintained; transfer to transport stretcher; transport from helipad to receiving unit; patient tolerance.
+PARAGRAPH 11 — TRANSFER OF CARE. Receiving nurse + credentials; receiving physician + credentials; complete bedside report; transfer from flight stretcher to hospital bed (sheet technique); maintenance of all lines/tubes/drains/monitors/ventilator; questions answered; no concerns voiced; formal transfer of care; patient condition at handoff (use the provided condition verbatim, e.g., stable, critical but stable, unchanged, improved).
+
+CREW TRANSPORT NOTES (handoff/disposition/load fields):
+${JSON.stringify(cct, null, 2)}
+
+SOURCE CHART DATA (all entered fields, photo-extracted values, labs, meds, distances, and the in-flight timeline):
+${JSON.stringify(data, null, 2)}`;
+      let response = await callAnthropic(prompt);
+      response = response.replace(/^\`\`\`(?:json|text)?\s*/i, '').replace(/\`\`\`\s*$/, '').trim();
+      $('camts11Out').textContent = response;
+      $('camts11Out').classList.add('polished');
+      btn.disabled = false;
+      btn.innerHTML = '📄 Regenerate 11-Paragraph Flight Narrative';
+      setStatus('11-paragraph narrative generated.');
+      setTimeout(() => setStatus(''), 2000);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '📄 Generate 11-Paragraph Flight Narrative';
+      setStatus('Generation failed: ' + (err.message || err), true);
     }
   }
 
