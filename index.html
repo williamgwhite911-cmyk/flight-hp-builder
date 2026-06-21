@@ -891,6 +891,12 @@
   <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
 </header>
 
+<div id="testBanner" style="display:none;background:#dc2626;color:#fff;padding:9px 14px;font-weight:700;font-size:13px;text-align:center;line-height:1.5">
+  🧪 TEST MODE — records are isolated (separate test store) and shared-sheet logging is OFF.
+  <button type="button" onclick="loadSamplePatient()" style="margin:0 4px;padding:4px 10px;border:none;border-radius:6px;background:#fff;color:#991b1b;font-weight:700;cursor:pointer">Load sample patient</button>
+  <button type="button" onclick="setTestMode(false)" style="margin:0 4px;padding:4px 10px;border:1px solid #fff;border-radius:6px;background:transparent;color:#fff;font-weight:700;cursor:pointer">Exit test mode</button>
+</div>
+
 <div class="tabs">
   <button class="tab active" onclick="switchTab('form')">Inputs</button>
   <button class="tab" onclick="switchTab('output')">Output</button>
@@ -2442,6 +2448,12 @@
       <strong>Pilot use only.</strong> Photos are sent to Claude (Anthropic API) to extract pump/vent settings. <b>Always cover patient name, MRN, or any visible identifiers before photographing.</b> Do not use with live patient data in production until your facility approves.
     </div>
 
+    <h3>🧪 Test mode</h3>
+    <label style="display:flex;gap:8px;align-items:center;font-weight:normal;cursor:pointer">
+      <input type="checkbox" id="testModeToggle"> Enable Test Mode (sandbox)
+    </label>
+    <div class="hint">A red banner appears, saved records go to a <b>separate test store</b> (your real records are untouched), and <b>shared-sheet logging is disabled</b>. Use the <b>Load sample patient</b> button in the banner to practice the full flow with non-real data. AI generation still works (uses your key).</div>
+
     <h3>Shared central log (Google Sheet)</h3>
     <div class="hint">Logs each saved report to one shared Google Sheet so any crew member using this app can pull it up. Requires a Google Apps Script web-app URL (setup instructions provided separately).</div>
     <input type="text" id="sharedLogUrl" placeholder="https://script.google.com/macros/s/…/exec" style="margin-top:6px">
@@ -2809,6 +2821,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
     if ($('sharedLogToken')) $('sharedLogToken').value = s.sharedLogToken;
     if ($('sharedLogEnabled')) $('sharedLogEnabled').checked = s.sharedLog;
     if ($('sharedLogAck')) $('sharedLogAck').checked = s.sharedLogAck;
+    if ($('testModeToggle')) $('testModeToggle').checked = isTestMode();
     $('settingsModal').classList.add('show');
   }
   function closeSettings(){ $('settingsModal').classList.remove('show'); }
@@ -2825,6 +2838,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
     const ack = $('sharedLogAck') && $('sharedLogAck').checked;
     if (wantLog && !ack) { alert('To enable auto-logging of PHI to the shared sheet, you must check the BAA/restricted-access acknowledgment.'); }
     localStorage.setItem('hp_sharedlog_enabled', (wantLog && ack) ? '1' : '0');
+    if ($('testModeToggle')) setTestMode($('testModeToggle').checked);
     closeSettings();
     setStatus('Settings saved.');
     setTimeout(() => setStatus(''), 1500);
@@ -5930,8 +5944,50 @@ ${JSON.stringify(data, null, 2)}`;
   }
 
   // ====== Auto-save, manual save, and saved-records log ======
-  const AUTOSAVE_KEY = 'hp_autosave_v1';
-  const RECORDS_KEY = 'hp_saved_records_v1';
+  // Test Mode isolates storage to a separate namespace and blocks PHI egress (shared-sheet logging).
+  function isTestMode(){ try { return localStorage.getItem('hp_test_mode') === '1'; } catch (e) { return false; } }
+  function autosaveKey(){ return isTestMode() ? 'hp_autosave_test' : 'hp_autosave_v1'; }
+  function recordsKey(){ return isTestMode() ? 'hp_saved_records_test' : 'hp_saved_records_v1'; }
+  function setTestMode(on){
+    try { localStorage.setItem('hp_test_mode', on ? '1' : '0'); } catch (e) {}
+    refreshTestBanner();
+    if (typeof updateRecordsBtn === 'function') updateRecordsBtn();
+    setStatus(on ? '🧪 Test Mode ON — isolated test records; shared logging off.' : 'Test Mode off — back to live records.');
+    setTimeout(() => setStatus(''), 3000);
+  }
+  function refreshTestBanner(){
+    const b = $('testBanner'); if (b) b.style.display = isTestMode() ? 'block' : 'none';
+  }
+  function loadSamplePatient(){
+    if (!isTestMode() && !confirm('Load a non-real SAMPLE patient into the form? (Recommended only in Test Mode.)')) return;
+    const set = (id, v) => { if ($(id)) $(id).value = v; };
+    const ift = document.querySelector('input[name=callType][value=ift]');
+    if (ift) { ift.checked = true; ift.dispatchEvent(new Event('change')); }
+    set('statFlightNum', 'Trauma Star 1'); set('aircraft', 'N911TS');
+    set('flightRN', 'Kate, RN'); set('flightMedic', 'Will, FP-C'); set('pilot', 'Morgan');
+    set('ocaNumber', 'TEST-RUN-0001');
+    if ($('ocaDate')) $('ocaDate').value = new Date().toISOString().slice(0, 10);
+    set('ptName', 'ZZTEST, Demo (NOT A REAL PATIENT)'); set('ptAge', '63');
+    if ($('ptSex')) $('ptSex').value = 'Male';
+    set('ptMRN', 'TEST-0001'); set('ptWeight', '84.4 kg'); set('ptHeight', '178 cm');
+    set('sendHospName', "Baptist Health Fishermen's Community Hospital");
+    if (typeof autoFillHospAddr === 'function') autoFillHospAddr('send');
+    set('recvHosp', 'Baptist Hospital'); set('recvUnit', 'Cardiac cath lab'); set('recvSvc', 'Interventional Cardiology');
+    if ($('recvMDName')) $('recvMDName').value = 'Lopez-Sanabria';
+    set('cc', 'STEMI (inferolateral) — DEMO/TEST patient, not real.');
+    set('onset', 'Upset stomach this morning; EKG confirmed STEMI; STEMI protocol initiated.');
+    set('vsBP', '134/97'); set('vsHR', '106'); set('vsRR', '18'); set('vsSpO2', '98'); set('vsTemp', '98.6');
+    set('drips', 'Heparin 1,000 units/hr');
+    if (typeof dxSelected !== 'undefined' && typeof renderDxChips === 'function') {
+      if (dxSelected.indexOf('STEMI - inferior') < 0) { dxSelected.push('STEMI - inferior'); renderDxChips(); }
+    }
+    if (typeof updateHeightConv === 'function') updateHeightConv();
+    if (typeof updateWeightConv === 'function') updateWeightConv();
+    if (typeof interpretGas === 'function') interpretGas();
+    if (typeof doAutosave === 'function') doAutosave();
+    setStatus('Sample patient loaded (test data). Try generating a narrative or report.');
+    setTimeout(() => setStatus(''), 3500);
+  }
   let suppressAutosave = false;
   let autosaveTimer = null;
 
@@ -6047,7 +6103,7 @@ ${JSON.stringify(data, null, 2)}`;
   }
   function doAutosave(){
     try {
-      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ savedAt: new Date().toISOString(), state: captureState() }));
+      localStorage.setItem(autosaveKey(), JSON.stringify({ savedAt: new Date().toISOString(), state: captureState() }));
       setAutosaveStatus('Autosaved ' + fmtTime(new Date()));
     } catch (e) {
       setAutosaveStatus('Autosave failed — storage may be full');
@@ -6056,13 +6112,13 @@ ${JSON.stringify(data, null, 2)}`;
   function startFresh(){
     if (!confirm('Clear the current form and outputs? Saved records are kept.')) return;
     resetForm();
-    localStorage.removeItem(AUTOSAVE_KEY);
+    localStorage.removeItem(autosaveKey());
     setAutosaveStatus('Cleared');
   }
 
   // ---- Saved records log ----
-  function loadRecords(){ try { return JSON.parse(localStorage.getItem(RECORDS_KEY) || '[]'); } catch (e) { return []; } }
-  function storeRecords(arr){ localStorage.setItem(RECORDS_KEY, JSON.stringify(arr)); updateRecordsBtn(); }
+  function loadRecords(){ try { return JSON.parse(localStorage.getItem(recordsKey()) || '[]'); } catch (e) { return []; } }
+  function storeRecords(arr){ localStorage.setItem(recordsKey(), JSON.stringify(arr)); updateRecordsBtn(); }
   function updateRecordsBtn(){ const el = $('recordsBtnCount'); if (el) { const n = loadRecords().length; el.textContent = n ? ` (${n})` : ''; } }
   function recordLabel(){
     const name = val('ptName');
@@ -6102,6 +6158,7 @@ ${JSON.stringify(data, null, 2)}`;
     });
   }
   function sendRecordToShared(rec, manual){
+    if (isTestMode()) { if (manual) alert('Test Mode is ON — shared-sheet logging is disabled so test data never reaches the live log.'); return false; }
     const s = loadSettings();
     if (!s.sharedLogUrl) { if (manual) { alert('Set the shared log URL in Settings first.'); openSettings(); } return false; }
     if (!rec.loggedBy) rec.loggedBy = val('flightRN') || val('flightMedic') || val('pilot') || '';
@@ -6405,7 +6462,7 @@ ${JSON.stringify(data, null, 2)}`;
     document.addEventListener('change', scheduleAutosave, true);
     updateRecordsBtn();
     try {
-      const raw = localStorage.getItem(AUTOSAVE_KEY);
+      const raw = localStorage.getItem(autosaveKey());
       if (raw) {
         const obj = JSON.parse(raw);
         if (obj && obj.state) {
@@ -6416,7 +6473,7 @@ ${JSON.stringify(data, null, 2)}`;
     } catch (e) { /* ignore corrupt autosave */ }
   }
   // Defer until the whole script has finished initializing the form
-  setTimeout(() => { if (typeof renderFlightEntries === 'function') renderFlightEntries(); initSaveSystem(); if (typeof checkHandoff === 'function') checkHandoff(); }, 0);
+  setTimeout(() => { if (typeof renderFlightEntries === 'function') renderFlightEntries(); if (typeof refreshTestBanner === 'function') refreshTestBanner(); initSaveSystem(); if (typeof checkHandoff === 'function') checkHandoff(); }, 0);
 
   // ====== Hospital address auto-fill ======
   const HOSPITAL_ADDRESSES = {
