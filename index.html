@@ -2432,9 +2432,37 @@
       <strong>Pilot use only.</strong> Photos are sent to Claude (Anthropic API) to extract pump/vent settings. <b>Always cover patient name, MRN, or any visible identifiers before photographing.</b> Do not use with live patient data in production until your facility approves.
     </div>
 
+    <h3>Shared central log (Google Sheet)</h3>
+    <div class="hint">Logs each saved report to one shared Google Sheet so any crew member using this app can pull it up. Requires a Google Apps Script web-app URL (setup instructions provided separately).</div>
+    <input type="text" id="sharedLogUrl" placeholder="https://script.google.com/macros/s/…/exec" style="margin-top:6px">
+    <input type="password" id="sharedLogToken" placeholder="Shared secret token (must match the script)" style="margin-top:6px">
+    <label style="display:flex;gap:8px;align-items:center;font-weight:normal;cursor:pointer;margin-top:8px">
+      <input type="checkbox" id="sharedLogEnabled"> Auto-log every saved report to the shared sheet
+    </label>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-weight:normal;cursor:pointer;margin-top:6px">
+      <input type="checkbox" id="sharedLogAck" style="margin-top:3px"> I confirm the Google Sheet/endpoint is in a <b>Workspace account under a signed BAA</b>, restricted to authorized crew (not public).
+    </label>
+    <div class="warning-box">
+      <strong>PHI — read this.</strong> This sends the <b>full report including patient name/MRN</b> to your shared sheet. A consumer Google account is <b>not HIPAA-compliant</b>. Use only a BAA-covered Google Workspace with the Sheet restricted to authorized users. The secret token gates the endpoint but does not replace those controls. Auto-logging will not run unless the acknowledgment above is checked.
+    </div>
+
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
       <button class="btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="sharedLogModal" onclick="if(event.target===this)closeSharedLog()">
+  <div class="modal">
+    <h2>🌐 Shared Central Log</h2>
+    <p style="font-size:13px;color:#475569;margin:6px 0 0;">Reports logged by any crew member to the shared Google Sheet. <b>Import</b> pulls one into this device's records.</p>
+    <input type="search" id="sharedLogSearch" placeholder="🔎 Search the shared log…" oninput="renderSharedLog()" style="margin-top:10px;width:100%">
+    <div id="sharedLogStatus" class="hint" style="margin-top:8px"></div>
+    <div id="sharedLogList" style="margin-top:8px"></div>
+    <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
+      <button class="btn-secondary" onclick="loadSharedLog()">🔄 Refresh</button>
+      <button class="btn-primary" onclick="closeSharedLog()">Close</button>
     </div>
   </div>
 </div>
@@ -2450,6 +2478,7 @@
       <button class="btn-secondary" onclick="document.getElementById('importRecordsFile').click()">⬆ Import (merge / replace)</button>
       <button class="btn-secondary" onclick="exportSelected()">📤 Export selected</button>
       <button class="btn-secondary" onclick="exportAllRecords()">📤 Export all</button>
+      <button class="btn-secondary" onclick="openSharedLog()">🌐 Shared Log</button>
       <button class="btn-primary" onclick="closeLog()">Close</button>
     </div>
   </div>
@@ -2753,6 +2782,10 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
       google: localStorage.getItem('hp_google_key') || '',
       model: localStorage.getItem('hp_model') || 'claude-sonnet-4-6',
       photoOcr: localStorage.getItem('hp_photo_ocr') === '1',
+      sharedLogUrl: localStorage.getItem('hp_sharedlog_url') || '',
+      sharedLogToken: localStorage.getItem('hp_sharedlog_token') || '',
+      sharedLog: localStorage.getItem('hp_sharedlog_enabled') === '1',
+      sharedLogAck: localStorage.getItem('hp_sharedlog_ack') === '1',
     };
   }
   function openSettings(){
@@ -2761,6 +2794,10 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
     $('googleKey').value = s.google;
     $('modelSelect').value = s.model;
     $('enablePhotoOcr').checked = s.photoOcr;
+    if ($('sharedLogUrl')) $('sharedLogUrl').value = s.sharedLogUrl;
+    if ($('sharedLogToken')) $('sharedLogToken').value = s.sharedLogToken;
+    if ($('sharedLogEnabled')) $('sharedLogEnabled').checked = s.sharedLog;
+    if ($('sharedLogAck')) $('sharedLogAck').checked = s.sharedLogAck;
     $('settingsModal').classList.add('show');
   }
   function closeSettings(){ $('settingsModal').classList.remove('show'); }
@@ -2769,6 +2806,14 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
     localStorage.setItem('hp_google_key', $('googleKey').value.trim());
     localStorage.setItem('hp_model', $('modelSelect').value);
     localStorage.setItem('hp_photo_ocr', $('enablePhotoOcr').checked ? '1' : '0');
+    localStorage.setItem('hp_sharedlog_url', $('sharedLogUrl') ? $('sharedLogUrl').value.trim() : '');
+    localStorage.setItem('hp_sharedlog_token', $('sharedLogToken') ? $('sharedLogToken').value.trim() : '');
+    localStorage.setItem('hp_sharedlog_ack', ($('sharedLogAck') && $('sharedLogAck').checked) ? '1' : '0');
+    // Auto-logging requires BOTH the enable checkbox AND the BAA acknowledgment
+    const wantLog = $('sharedLogEnabled') && $('sharedLogEnabled').checked;
+    const ack = $('sharedLogAck') && $('sharedLogAck').checked;
+    if (wantLog && !ack) { alert('To enable auto-logging of PHI to the shared sheet, you must check the BAA/restricted-access acknowledgment.'); }
+    localStorage.setItem('hp_sharedlog_enabled', (wantLog && ack) ? '1' : '0');
     closeSettings();
     setStatus('Settings saved.');
     setTimeout(() => setStatus(''), 1500);
@@ -5985,6 +6030,88 @@ ${JSON.stringify(data, null, 2)}`;
     if (recs.length > 100) recs = recs.slice(0, 100);
     try { storeRecords(recs); setAutosaveStatus('Saved to log ✓ ' + fmtTime(new Date())); }
     catch (e) { alert('Could not save — local storage may be full. Delete old records and try again.'); }
+    pushToSharedLog(rec);
+  }
+
+  // ====== Shared central log (Google Apps Script web app + Sheet) ======
+  // JSONP loader — Apps Script web apps don't send CORS headers, so reads use a
+  // <script> callback. Writes use a fire-and-forget no-cors POST.
+  function jsonp(url, params, timeoutMs){
+    return new Promise((resolve, reject) => {
+      const cb = 'hpcb_' + Date.now() + Math.floor(Math.random() * 1000);
+      const s = document.createElement('script');
+      let done = false;
+      const cleanup = () => { try { delete window[cb]; } catch (e) { window[cb] = undefined; } if (s.parentNode) s.parentNode.removeChild(s); };
+      const timer = setTimeout(() => { if (!done) { done = true; cleanup(); reject(new Error('Shared log request timed out')); } }, timeoutMs || 15000);
+      window[cb] = (data) => { if (done) return; done = true; clearTimeout(timer); cleanup(); resolve(data); };
+      s.onerror = () => { if (done) return; done = true; clearTimeout(timer); cleanup(); reject(new Error('Could not reach the shared log (check the URL/deployment)')); };
+      const q = new URLSearchParams(Object.assign({}, params, { callback: cb })).toString();
+      s.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + q;
+      document.body.appendChild(s);
+    });
+  }
+  function pushToSharedLog(rec){
+    const s = loadSettings();
+    if (!s.sharedLog || !s.sharedLogUrl) return; // auto-log off or not configured
+    const payload = { token: s.sharedLogToken, action: 'log', record: rec };
+    try {
+      fetch(s.sharedLogUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+        .then(() => setAutosaveStatus('Logged to shared sheet ✓ ' + fmtTime(new Date())))
+        .catch(() => setAutosaveStatus('Shared-sheet log failed (saved locally)'));
+    } catch (e) { /* never block the local save */ }
+  }
+  let sharedLogEntries = [];
+  function openSharedLog(){ $('sharedLogModal').classList.add('show'); loadSharedLog(); }
+  function closeSharedLog(){ $('sharedLogModal').classList.remove('show'); }
+  async function loadSharedLog(){
+    const s = loadSettings();
+    const status = $('sharedLogStatus');
+    if (!s.sharedLogUrl) { status.textContent = 'Set the shared log URL in Settings first.'; return; }
+    status.innerHTML = '<span class="spinner"></span> Loading shared log…';
+    try {
+      const data = await jsonp(s.sharedLogUrl, { token: s.sharedLogToken, action: 'list' });
+      if (data && data.error) { status.textContent = 'Shared log error: ' + data.error; return; }
+      sharedLogEntries = (data && Array.isArray(data.records)) ? data.records : (Array.isArray(data) ? data : []);
+      status.textContent = sharedLogEntries.length + ' record(s) in the shared log.';
+      renderSharedLog();
+    } catch (err) {
+      status.textContent = 'Could not load shared log: ' + (err.message || err);
+    }
+  }
+  function renderSharedLog(){
+    const wrap = $('sharedLogList');
+    if (!wrap) return;
+    const q = (($('sharedLogSearch') && $('sharedLogSearch').value) || '').trim().toLowerCase();
+    const list = !q ? sharedLogEntries : sharedLogEntries.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+    if (!sharedLogEntries.length) { wrap.innerHTML = ''; return; }
+    if (!list.length) { wrap.innerHTML = '<p class="hint">No shared records match “' + escapeHtml(q) + '”.</p>'; return; }
+    wrap.innerHTML = list.map((r, i) => {
+      const oca = recOca(r), cd = recChartDate(r);
+      const meta = [];
+      if (oca) meta.push('OCA ' + escapeHtml(oca));
+      if (cd) meta.push('chart ' + escapeHtml(cd));
+      if (r.savedAt) meta.push('saved ' + escapeHtml(fmtDateTime(new Date(r.savedAt))));
+      if (r.loggedBy) meta.push('by ' + escapeHtml(r.loggedBy));
+      return `<div class="record-item">
+        <h4>${escapeHtml(r.label || 'Record')}</h4>
+        <div class="record-meta">${meta.join(' · ')}</div>
+        <div class="record-actions">
+          <button type="button" class="calc-btn" style="width:auto" onclick="importSharedEntry(${i})">📥 Import to this device</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  function importSharedEntry(i){
+    const q = (($('sharedLogSearch') && $('sharedLogSearch').value) || '').trim().toLowerCase();
+    const list = !q ? sharedLogEntries : sharedLogEntries.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+    const r = list[i];
+    if (!r || !r.state) { alert('That shared entry has no chart data.'); return; }
+    const recs = loadRecords();
+    const rr = Object.assign({}, r, { id: newId() });
+    recs.unshift(rr);
+    storeRecords(recs);
+    setAutosaveStatus('Imported from shared log ✓');
+    alert('Imported “' + (r.label || 'record') + '” into this device’s Saved Records.');
   }
   // Pull identifiers from a record (top-level or from its captured fields, for older records)
   function recField(r, id){ return (r.state && r.state.fields && r.state.fields[id] && r.state.fields[id].v) || ''; }
