@@ -893,8 +893,10 @@
 
 <div id="testBanner" style="display:none;background:#dc2626;color:#fff;padding:9px 14px;font-weight:700;font-size:13px;text-align:center;line-height:1.5">
   🧪 TEST MODE — records are isolated (separate test store) and shared-sheet logging is OFF.
-  <button type="button" onclick="loadSamplePatient()" style="margin:0 4px;padding:4px 10px;border:none;border-radius:6px;background:#fff;color:#991b1b;font-weight:700;cursor:pointer">Load sample patient</button>
-  <button type="button" onclick="setTestMode(false)" style="margin:0 4px;padding:4px 10px;border:1px solid #fff;border-radius:6px;background:transparent;color:#fff;font-weight:700;cursor:pointer">Exit test mode</button>
+  <button type="button" onclick="loadSamplePatient('adult')" style="margin:0 3px;padding:4px 10px;border:none;border-radius:6px;background:#fff;color:#991b1b;font-weight:700;cursor:pointer">Load adult sample</button>
+  <button type="button" onclick="loadSamplePatient('peds')" style="margin:0 3px;padding:4px 10px;border:none;border-radius:6px;background:#fff;color:#991b1b;font-weight:700;cursor:pointer">Load peds sample</button>
+  <button type="button" onclick="clearTestRecords()" style="margin:0 3px;padding:4px 10px;border:1px solid #fff;border-radius:6px;background:transparent;color:#fff;font-weight:700;cursor:pointer">Clear test records</button>
+  <button type="button" onclick="setTestMode(false)" style="margin:0 3px;padding:4px 10px;border:1px solid #fff;border-radius:6px;background:transparent;color:#fff;font-weight:700;cursor:pointer">Exit test mode</button>
 </div>
 
 <div class="tabs">
@@ -5958,35 +5960,57 @@ ${JSON.stringify(data, null, 2)}`;
   function refreshTestBanner(){
     const b = $('testBanner'); if (b) b.style.display = isTestMode() ? 'block' : 'none';
   }
-  function loadSamplePatient(){
+  function loadSamplePatient(kind){
+    kind = kind || 'adult';
     if (!isTestMode() && !confirm('Load a non-real SAMPLE patient into the form? (Recommended only in Test Mode.)')) return;
     const set = (id, v) => { if ($(id)) $(id).value = v; };
     const ift = document.querySelector('input[name=callType][value=ift]');
     if (ift) { ift.checked = true; ift.dispatchEvent(new Event('change')); }
     set('statFlightNum', 'Trauma Star 1'); set('aircraft', 'N911TS');
     set('flightRN', 'Kate, RN'); set('flightMedic', 'Will, FP-C'); set('pilot', 'Morgan');
-    set('ocaNumber', 'TEST-RUN-0001');
     if ($('ocaDate')) $('ocaDate').value = new Date().toISOString().slice(0, 10);
-    set('ptName', 'ZZTEST, Demo (NOT A REAL PATIENT)'); set('ptAge', '63');
-    if ($('ptSex')) $('ptSex').value = 'Male';
-    set('ptMRN', 'TEST-0001'); set('ptWeight', '84.4 kg'); set('ptHeight', '178 cm');
     set('sendHospName', "Baptist Health Fishermen's Community Hospital");
     if (typeof autoFillHospAddr === 'function') autoFillHospAddr('send');
-    set('recvHosp', 'Baptist Hospital'); set('recvUnit', 'Cardiac cath lab'); set('recvSvc', 'Interventional Cardiology');
-    if ($('recvMDName')) $('recvMDName').value = 'Lopez-Sanabria';
-    set('cc', 'STEMI (inferolateral) — DEMO/TEST patient, not real.');
-    set('onset', 'Upset stomach this morning; EKG confirmed STEMI; STEMI protocol initiated.');
-    set('vsBP', '134/97'); set('vsHR', '106'); set('vsRR', '18'); set('vsSpO2', '98'); set('vsTemp', '98.6');
-    set('drips', 'Heparin 1,000 units/hr');
-    if (typeof dxSelected !== 'undefined' && typeof renderDxChips === 'function') {
-      if (dxSelected.indexOf('STEMI - inferior') < 0) { dxSelected.push('STEMI - inferior'); renderDxChips(); }
+    if (kind === 'peds') {
+      set('ocaNumber', 'TEST-PED-0001');
+      set('ptName', 'ZZTEST, Peds Demo (NOT A REAL PATIENT)'); set('ptAge', '6');
+      if ($('ptSex')) $('ptSex').value = 'Male';
+      set('ptMRN', 'TEST-PED-1'); set('ptWeight', '22 kg'); set('ptHeight', '116 cm');
+      set('recvHosp', "Nicklaus Children's Hospital"); set('recvUnit', 'PICU'); set('recvSvc', 'Pediatric Critical Care');
+      if ($('recvMDName')) $('recvMDName').value = 'Garcia';
+      set('cc', 'Status asthmaticus / respiratory distress — DEMO/TEST patient, not real.');
+      set('onset', '2 days of cough and wheeze, worsening work of breathing today; poor response to nebulizers.');
+      set('vsBP', '100/64'); set('vsHR', '140'); set('vsRR', '36'); set('vsSpO2', '90'); set('vsTemp', '99.8');
+      set('drips', 'Continuous albuterol nebulizer; magnesium sulfate 50 mg/kg given');
+    } else {
+      set('ocaNumber', 'TEST-RUN-0001');
+      set('ptName', 'ZZTEST, Demo (NOT A REAL PATIENT)'); set('ptAge', '63');
+      if ($('ptSex')) $('ptSex').value = 'Male';
+      set('ptMRN', 'TEST-0001'); set('ptWeight', '84.4 kg'); set('ptHeight', '178 cm');
+      set('recvHosp', 'Baptist Hospital'); set('recvUnit', 'Cardiac cath lab'); set('recvSvc', 'Interventional Cardiology');
+      if ($('recvMDName')) $('recvMDName').value = 'Lopez-Sanabria';
+      set('cc', 'STEMI (inferolateral) — DEMO/TEST patient, not real.');
+      set('onset', 'Upset stomach this morning; EKG confirmed STEMI; STEMI protocol initiated.');
+      set('vsBP', '134/97'); set('vsHR', '106'); set('vsRR', '18'); set('vsSpO2', '98'); set('vsTemp', '98.6');
+      set('drips', 'Heparin 1,000 units/hr');
+      if (typeof dxSelected !== 'undefined' && typeof renderDxChips === 'function') {
+        if (dxSelected.indexOf('STEMI - inferior') < 0) { dxSelected.push('STEMI - inferior'); renderDxChips(); }
+      }
     }
     if (typeof updateHeightConv === 'function') updateHeightConv();
     if (typeof updateWeightConv === 'function') updateWeightConv();
     if (typeof interpretGas === 'function') interpretGas();
     if (typeof doAutosave === 'function') doAutosave();
-    setStatus('Sample patient loaded (test data). Try generating a narrative or report.');
+    setStatus((kind === 'peds' ? 'Sample PEDS' : 'Sample') + ' patient loaded (test data). Try generating a narrative or report.');
     setTimeout(() => setStatus(''), 3500);
+  }
+  function clearTestRecords(){
+    if (!confirm('Clear ALL test records and the test autosave from this device?\n\nYour live (production) records are NOT affected.')) return;
+    try { localStorage.removeItem('hp_saved_records_test'); localStorage.removeItem('hp_autosave_test'); } catch (e) {}
+    if (typeof updateRecordsBtn === 'function') updateRecordsBtn();
+    if ($('logModal') && $('logModal').classList.contains('show') && typeof renderLog === 'function') renderLog();
+    setStatus('Test records cleared.');
+    setTimeout(() => setStatus(''), 2500);
   }
   let suppressAutosave = false;
   let autosaveTimer = null;
