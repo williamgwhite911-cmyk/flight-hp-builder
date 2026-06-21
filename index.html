@@ -1044,6 +1044,7 @@
               <input type="text" id="ptWeight" list="weightList" placeholder="180 lb or 82 kg" oninput="updateWeightConv()">
             </div>
           </div>
+          <button class="add-btn" type="button" style="background:#ecfeff;color:#155e75;border-color:#67e8f9;border-style:solid" onclick="openAdultCalc()">🧮 Open Adult dosing calculator with this patient</button>
           <div class="row">
             <div><label>Driver's License #</label>
               <input type="text" id="ptDLNum" placeholder="auto-filled from license photo">
@@ -6350,6 +6351,22 @@ ${JSON.stringify(data, null, 2)}`;
     reader.readAsText(file);
   }
 
+  // ====== Reverse handoff: open the Adult dosing calculator with this patient ======
+  function openAdultCalc(){
+    const kgFrom = (s) => { const lb = (typeof parseWeightToLb === 'function') ? parseWeightToLb(s) : null; return lb ? Math.round(lb / 2.20462 * 10) / 10 : null; };
+    const cmFrom = (s) => { const inch = (typeof parseHeightToInches === 'function') ? parseHeightToInches(s) : null; return inch ? Math.round(inch * 2.54) : null; };
+    const sexRaw = val('ptSex');
+    const payload = {
+      source: 'flight', ts: Date.now(),
+      weightKg: kgFrom(val('ptWeight')),
+      heightCm: cmFrom(val('ptHeight')),
+      sex: sexRaw === 'Female' ? 'F' : (sexRaw === 'Male' ? 'M' : null),
+      ageYr: val('ptAge') ? parseFloat(val('ptAge')) : null,
+    };
+    try { localStorage.setItem('ts_handoff', JSON.stringify(payload)); } catch (e) {}
+    window.location.href = '/stat-OB/adult.html?from=flight';
+  }
+
   // ====== Cross-app handoff (Adult CCT app -> Flight Builder, same-origin localStorage) ======
   function checkHandoff(){
     let raw; try { raw = localStorage.getItem('hp_handoff'); } catch (e) { return; }
@@ -6370,7 +6387,9 @@ ${JSON.stringify(data, null, 2)}`;
     if (h.heightCm) setIfHave('ptHeight', Math.round(h.heightCm) + ' cm');
     setIfHave('vsHR', h.hr);
     if (h.sbp) setIfHave('vsBP', h.sbp + '/');   // SBP only from the Adult app; complete the diastolic
-    setIfHave('cc', h.dx);
+    let ccText = h.dx || '';
+    if (h.shockIndex) ccText = (ccText ? ccText + ' — ' : '') + 'shock index ' + h.shockIndex;
+    if (ccText) setIfHave('cc', ccText);
     if (h.ibw) setIfHave('vIBW', Math.round(h.ibw) + ' kg');
     if (h.tidalVolume) setIfHave('vTV', h.tidalVolume);
     if (typeof updateHeightConv === 'function') updateHeightConv();
