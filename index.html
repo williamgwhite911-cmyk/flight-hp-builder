@@ -2478,6 +2478,7 @@
       <button class="btn-secondary" onclick="document.getElementById('importRecordsFile').click()">⬆ Import (merge / replace)</button>
       <button class="btn-secondary" onclick="exportSelected()">📤 Export selected</button>
       <button class="btn-secondary" onclick="exportAllRecords()">📤 Export all</button>
+      <button class="btn-secondary" onclick="logCurrentToShared()">☁️ Log current to shared</button>
       <button class="btn-secondary" onclick="openSharedLog()">🌐 Shared Log</button>
       <button class="btn-primary" onclick="closeLog()">Close</button>
     </div>
@@ -6050,15 +6051,29 @@ ${JSON.stringify(data, null, 2)}`;
       document.body.appendChild(s);
     });
   }
-  function pushToSharedLog(rec){
+  function sendRecordToShared(rec, manual){
     const s = loadSettings();
-    if (!s.sharedLog || !s.sharedLogUrl) return; // auto-log off or not configured
+    if (!s.sharedLogUrl) { if (manual) { alert('Set the shared log URL in Settings first.'); openSettings(); } return false; }
+    if (!rec.loggedBy) rec.loggedBy = val('flightRN') || val('flightMedic') || val('pilot') || '';
     const payload = { token: s.sharedLogToken, action: 'log', record: rec };
     try {
       fetch(s.sharedLogUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
         .then(() => setAutosaveStatus('Logged to shared sheet ✓ ' + fmtTime(new Date())))
         .catch(() => setAutosaveStatus('Shared-sheet log failed (saved locally)'));
-    } catch (e) { /* never block the local save */ }
+      return true;
+    } catch (e) { return false; }
+  }
+  function pushToSharedLog(rec){
+    if (!loadSettings().sharedLog) return; // auto-log off — manual still works
+    sendRecordToShared(rec, false);
+  }
+  function logCurrentToShared(){
+    const s = loadSettings();
+    if (!s.sharedLogUrl) { alert('Set the shared log URL in Settings first.'); openSettings(); return; }
+    if (!s.sharedLogAck) { alert('Check the BAA / restricted-access acknowledgment in Settings before logging PHI to the shared sheet.'); openSettings(); return; }
+    if (!confirm('Log the current chart (including PHI) to the shared Google Sheet now?')) return;
+    const rec = { id: newId(), label: recordLabel(), oca: val('ocaNumber'), chartDate: val('ocaDate'), savedAt: new Date().toISOString(), state: captureState() };
+    if (sendRecordToShared(rec, true)) setAutosaveStatus('Logging current chart to shared sheet…');
   }
   let sharedLogEntries = [];
   function openSharedLog(){ $('sharedLogModal').classList.add('show'); loadSharedLog(); }
