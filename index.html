@@ -4484,16 +4484,41 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
   // ====== Allergies ======
   const ALLERGY_TYPES = ['Medication','Food','Environmental','Latex','Contrast','Insect/Sting','Other'];
   const ALLERGY_MAX = 10;
-  const DRUG_ALLERGENS = [
-    'Penicillin', 'Amoxicillin', 'Ampicillin', 'Cephalosporins', 'Sulfa (sulfonamides)',
-    'Aspirin', 'NSAIDs (ibuprofen/naproxen)', 'Ketorolac (Toradol)',
-    'Codeine', 'Morphine', 'Fentanyl', 'Hydrocodone', 'Oxycodone', 'Hydromorphone (Dilaudid)', 'Tramadol', 'Meperidine (Demerol)',
-    'Iodinated contrast', 'Latex', 'Vancomycin', 'Ciprofloxacin / fluoroquinolones', 'Levofloxacin',
-    'Erythromycin / macrolides', 'Azithromycin', 'Clindamycin', 'Tetracycline / doxycycline', 'Metronidazole (Flagyl)',
-    'Heparin', 'Lidocaine', 'Lisinopril / ACE inhibitors', 'Statins', 'Metformin',
-    'Phenytoin', 'Carbamazepine', 'Lamotrigine', 'Allopurinol', 'Gabapentin',
-    'Ondansetron (Zofran)', 'Promethazine (Phenergan)', 'Succinylcholine', 'Rocuronium', 'Propofol (egg/soy)',
+  // Most common allergens, grouped by class — the optgroup label also sets the Type.
+  const ALLERGEN_GROUPS = {
+    'Medication': [
+      'Penicillin', 'Amoxicillin', 'Ampicillin', 'Cephalosporins', 'Sulfa (sulfonamides)',
+      'Aspirin', 'NSAIDs (ibuprofen/naproxen)', 'Ketorolac (Toradol)',
+      'Codeine', 'Morphine', 'Fentanyl', 'Hydrocodone', 'Oxycodone', 'Hydromorphone (Dilaudid)', 'Tramadol', 'Meperidine (Demerol)',
+      'Vancomycin', 'Ciprofloxacin / fluoroquinolones', 'Levofloxacin', 'Erythromycin / macrolides', 'Azithromycin', 'Clindamycin', 'Tetracycline / doxycycline', 'Metronidazole (Flagyl)',
+      'Heparin', 'Lidocaine', 'Lisinopril / ACE inhibitors', 'Statins', 'Metformin',
+      'Phenytoin', 'Carbamazepine', 'Lamotrigine', 'Allopurinol', 'Gabapentin',
+      'Ondansetron (Zofran)', 'Promethazine (Phenergan)', 'Succinylcholine', 'Rocuronium', 'Propofol (egg/soy)',
+    ],
+    'Food': ['Peanuts', 'Tree nuts', 'Shellfish', 'Fish', 'Eggs', 'Milk / dairy', 'Soy', 'Wheat / gluten', 'Sesame'],
+    'Environmental': ['Pollen', 'Grass', 'Ragweed', 'Dust mites', 'Mold', 'Pet dander'],
+    'Insect/Sting': ['Bee / wasp sting', 'Fire ant'],
+    'Contrast': ['Iodinated contrast', 'Gadolinium contrast'],
+    'Latex': ['Latex'],
+    'Other': ['Adhesive / tape', 'Chlorhexidine', 'Eggs (vaccine)', 'Shellfish/iodine (historical)'],
+  };
+  // Most common reaction types.
+  const REACTION_TYPES = [
+    'Anaphylaxis', 'Hives (urticaria)', 'Rash', 'Itching (pruritus)', 'Swelling / angioedema', 'Throat / lip swelling',
+    'Shortness of breath / bronchospasm', 'Wheezing', 'Cough (ACE inhibitor)', 'Nausea / vomiting', 'Diarrhea / GI upset', 'GI bleeding',
+    'Dizziness / hypotension', 'Flushing', 'Difficulty swallowing', 'Stevens-Johnson syndrome (SJS)', 'DRESS', 'Renal injury', 'Intolerance (non-allergic)', 'Unknown',
   ];
+  function buildAllergenOptions(){
+    let html = '<option value="">+ Common allergy…</option>';
+    Object.keys(ALLERGEN_GROUPS).forEach(g => {
+      html += `<optgroup label="${g}">` + ALLERGEN_GROUPS[g].map(a => `<option value="${attrEsc(a)}">${a}</option>`).join('') + '</optgroup>';
+    });
+    html += '<optgroup label="Custom"><option value="__other">Other (type below)</option></optgroup>';
+    return html;
+  }
+  function buildReactionOptions(){
+    return '<option value="">+ Common reaction…</option>' + REACTION_TYPES.map(rx => `<option value="${attrEsc(rx)}">${rx}</option>`).join('') + '<option value="__other">Other (type below)</option>';
+  }
   function addAllergyRow(data){
     data = data || {};
     if ($('allergyList').querySelectorAll('.allergy-entry').length >= ALLERGY_MAX) {
@@ -4502,9 +4527,11 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
     const wrap = document.createElement('div');
     wrap.className = 'allergy-entry';
     const opts = ALLERGY_TYPES.map(t => `<option value="${t}" ${data.type === t ? 'selected' : ''}>${t}</option>`).join('');
-    const pick = DRUG_ALLERGENS.map(a => `<option value="${attrEsc(a)}">${a}</option>`).join('');
     wrap.innerHTML = `
-      <select class="alg-pick" onchange="onAllergyPick(this)"><option value="">+ Common medication allergy…</option>${pick}<option value="__other">Other (type below)</option></select>
+      <div class="row" style="margin-bottom:4px">
+        <select class="alg-pick" onchange="onAllergyPick(this)">${buildAllergenOptions()}</select>
+        <select class="alg-rxn-pick" onchange="onReactionPick(this)">${buildReactionOptions()}</select>
+      </div>
       <div class="allergy-row">
         <input type="text" class="alg-name" placeholder="Allergen (e.g., Penicillin)" value="${attrEsc(data.allergen)}">
         <select class="alg-type"><option value="">— Type —</option>${opts}</select>
@@ -4519,7 +4546,20 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
     if (!wrap) return;
     const name = wrap.querySelector('.alg-name'), type = wrap.querySelector('.alg-type');
     if (sel.value === '__other') { name.value = ''; name.focus(); }
-    else if (sel.value) { name.value = sel.value; if (type) type.value = 'Medication'; }
+    else if (sel.value) {
+      name.value = sel.value;
+      const opt = sel.selectedOptions && sel.selectedOptions[0];
+      const grp = (opt && opt.parentNode && opt.parentNode.label) || '';
+      if (type && ALLERGY_TYPES.indexOf(grp) >= 0) type.value = grp;  // group label maps to a Type
+    }
+    sel.selectedIndex = 0;
+  }
+  function onReactionPick(sel){
+    const wrap = sel.closest('.allergy-entry');
+    if (!wrap) return;
+    const rxn = wrap.querySelector('.alg-rxn');
+    if (sel.value === '__other') { rxn.value = ''; rxn.focus(); }
+    else if (sel.value) { rxn.value = sel.value; }
     sel.selectedIndex = 0;
   }
   function gatherAllergies(){
