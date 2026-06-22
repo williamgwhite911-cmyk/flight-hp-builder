@@ -2925,9 +2925,24 @@ Return ONLY the JSON object, no markdown.`;
     if (!licensePhotoDataUrls.length) { alert('Upload at least one license photo first.'); return; }
     if (!confirmPhi("driver's license")) return;
     const files = await dataUrlsToFiles(licensePhotoDataUrls, 'license');
-    const prompt = `Examine the US driver's license photo(s) (may include front and back, or multiple angles) and extract ALL personal information visible. Return ONLY a JSON object:
-{ "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "Full street address", "height": "5'10\\"" or "70 in", "weight": "180 lb", "sex": "M|F", "dlNumber": "license/ID number", "dlExpiration": "MM/DD/YYYY" }
-Omit any field you cannot read. Do not invent values. Return ONLY the JSON object, no markdown.`;
+    const prompt = `You are reading a US driver's license or state ID card from the photo(s) (front, and possibly the back). Read EVERY field printed on the card and return ONLY a JSON object with these exact keys:
+{
+  "name": "Last, First Middle",
+  "dob": "YYYY-MM-DD",
+  "address": "full street address, city, state ZIP",
+  "height": "height exactly as printed, e.g. 5'-10\\" or 5-10 or 70 in",
+  "weight": "weight exactly as printed, e.g. 180 lb",
+  "sex": "M or F",
+  "dlNumber": "the driver's license / ID number",
+  "dlExpiration": "MM/DD/YYYY"
+}
+US license field abbreviations to recognize and map:
+- "DL", "ID", "LIC", "LIC#", "DLN", or the long alphanumeric ID near the top right -> dlNumber
+- "EXP", "EXPIRES", or the field labeled "4b" -> dlExpiration
+- "HGT", "HT", or field "3" (often shown like 5'-10") -> height
+- "WGT", "WT", or a value in lb -> weight
+- "DOB" -> dob;  "SEX" or "1"/"2" near M/F -> sex
+Read height, weight, the license number, and the expiration date even when shown only with these abbreviations. Return values as printed (only normalize dob to YYYY-MM-DD and expiration to MM/DD/YYYY). Omit a key ONLY if it is truly not visible or not legible. Do not invent values. Return ONLY the JSON object, no markdown, no commentary.`;
     try {
       const text = await callClaudeVisionMulti(prompt, files);
       const data = parseAiJson(text);
@@ -2943,7 +2958,11 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON objec
       setIfEmpty('ptDLNum', data.dlNumber);
       setIfEmpty('ptDLExp', data.dlExpiration);
       onDobChange();
-      alert('Extracted ' + Object.keys(data).filter(k => data[k]).length + ' field(s) from license.');
+      const got = [];
+      [['name','Name'],['dob','DOB'],['height','Height'],['weight','Weight'],['sex','Sex'],['dlNumber','DL #'],['dlExpiration','Exp']].forEach(([k,label]) => { if (data[k]) got.push(label); });
+      const missing = ['Height','Weight','DL #','Exp'].filter(l => got.indexOf(l) < 0);
+      alert('Captured from license: ' + (got.length ? got.join(', ') : 'nothing') + '.' +
+        (missing.length ? '\n\nNot read: ' + missing.join(', ') + '. If these are printed on the card, retake a sharper, well-lit, straight-on photo of the front (and back if needed) and try again.' : ''));
     } catch (err) {
       alert('Extraction failed: ' + (err.message || err));
     }
