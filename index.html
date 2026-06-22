@@ -1956,6 +1956,8 @@
         <div class="fieldset-body">
           <div class="hint">One in-flight section. Add a timed entry for each event — manually or by photographing the monitor / ventilator / IV pump (AI fills the entry). Each entry captures vital signs, oxygen / delivery device, ventilator settings (with the reason a setting was changed and the result), IV push meds, IV drips (titration, new rate, reason, outcome), and comments. Generate a paragraph narrative per entry, then combine all entries into one narrative starting from first patient contact. Entries begin with the time.</div>
           <div id="flightEntries"></div>
+          <!-- Shared hidden input for per-entry rhythm-strip interpretation (target entry tracked in __rhythmEntryId) -->
+          <input type="file" id="flightRhythmFile" accept="image/*" onchange="onFlightRhythmPhoto(event)" style="display:none">
           <button type="button" class="add-btn" style="margin-top:8px" onclick="addFlightEntry()">➕ Add timed entry</button>
 
           <div class="ai-tool-block" style="margin-top:10px">
@@ -2717,6 +2719,23 @@
     if (ocr) ocr.style.display = 'block'; // auto-fill is available whenever a face-sheet photo is present
   }
 
+  // Shared detailed EKG/rhythm-strip interpretation prompt — used by the Cardiac/EKG
+  // section AND by per-entry rhythm-strip interpretation in the in-flight timeline,
+  // so both get the same depth (BBB, P-wave/QRS morphology, AV blocks, transport plan).
+  const EKG_INTERP_PROMPT = `You are a critical-care flight clinician interpreting a 12-lead EKG and/or rhythm strip photo for a transport chart. Read ONLY what is visible in the image(s); do not invent values or findings you cannot see. Be systematic and specific. Provide the interpretation in plain text using these labeled lines (omit any line you genuinely cannot determine from the image):
+Rate: (atrial and ventricular rate in bpm; note if they differ, e.g., in AV dissociation)
+Rhythm: (e.g., normal sinus, sinus tachy/brady, atrial fibrillation, atrial flutter, junctional, paced, etc.)
+P wave: (presence/absence; morphology — peaked/P-pulmonale, broad-notched/P-mitrale, biphasic P waves in V1 and the significance, inverted/retrograde P waves; relationship of P to QRS)
+PR interval: (value in ms; state whether normal, short, prolonged, or progressively lengthening)
+QRS: (duration in ms; morphology — narrow vs wide; if wide, specify the bundle branch block pattern: LEFT bundle branch block (LBBB — broad/notched R in I, aVL, V5–V6; deep S in V1) vs RIGHT bundle branch block (RBBB — rSR'/"rabbit ears" in V1, wide slurred S in I, V6); note fascicular blocks (LAFB/LPFB), intraventricular conduction delay, paced QRS, or delta wave/pre-excitation)
+Axis: (normal / left axis deviation / right axis deviation / extreme — if determinable)
+AV block / conduction: (explicitly classify any heart block — first-degree (PR > 200 ms); second-degree Mobitz I/Wenckebach (progressive PR lengthening then a dropped beat); second-degree Mobitz II (constant PR with intermittent dropped QRS); high-grade/2:1 block; third-degree/complete heart block with AV dissociation; also note any bundle/fascicular block contributing to conduction disease)
+ST/T changes: (ST elevation or depression with the SPECIFIC leads and the territory; T-wave inversions/hyperacute T waves; note that LBBB or paced rhythm can obscure ST analysis and mention Sgarbossa criteria if relevant)
+Ectopy/other: (PVCs, PACs, pacing spikes, electrical alternans, low voltage, artifact, etc.)
+Interpretation: (the overall diagnostic impression / most likely diagnosis — e.g., "acute inferior STEMI", "complete heart block with junctional escape", "atrial fibrillation with RVR and RBBB", "new LBBB")
+Transport action plan: (concise, prioritized recommendations appropriate for a critical-care flight crew for THIS rhythm/finding — e.g., for symptomatic bradycardia/high-grade or complete heart block: atropine, transcutaneous pacing pads ready/active with sedation, chronotropic infusion such as epinephrine or dopamine, treat reversible causes; for STEMI: activate cath lab/notify receiving, ASA, nitro/heparin per protocol and contraindications, defib pads on; for unstable tachydysrhythmia: synchronized cardioversion vs rate/rhythm control; for wide-complex tachycardia of uncertain origin: treat as VT; always include continuous monitoring, defib/pacer pads, IV access, and what to anticipate en route. End this section with: "Confirm with medical control / receiving physician and follow protocol; clinical judgment overrides.")
+Do not add other disclaimers. Return plain text only, no markdown.`;
+
   // ====== EKG / rhythm strip photos (array; embedded in print) ======
   let ekgPhotoDataUrls = [];
   function handleEkgPhoto(event){
@@ -2764,21 +2783,8 @@
     const n = ekgPhotoDataUrls.length;
     if (status) { status.innerHTML = `<span class="spinner"></span> Interpreting ${n} EKG image${n === 1 ? '' : 's'}…`; status.style.color = '#5b21b6'; }
     const files = await dataUrlsToFiles(ekgPhotoDataUrls, 'ekg');
-    const prompt = `You are a critical-care flight clinician interpreting a 12-lead EKG and/or rhythm strip photo for a transport chart. Read ONLY what is visible in the image(s); do not invent values or findings you cannot see. Be systematic and specific. Provide the interpretation in plain text using these labeled lines (omit any line you genuinely cannot determine from the image):
-Rate: (atrial and ventricular rate in bpm; note if they differ, e.g., in AV dissociation)
-Rhythm: (e.g., normal sinus, sinus tachy/brady, atrial fibrillation, atrial flutter, junctional, paced, etc.)
-P wave: (presence/absence; morphology — peaked/P-pulmonale, broad-notched/P-mitrale, biphasic P waves in V1 and the significance, inverted/retrograde P waves; relationship of P to QRS)
-PR interval: (value in ms; state whether normal, short, prolonged, or progressively lengthening)
-QRS: (duration in ms; morphology — narrow vs wide; if wide, specify the bundle branch block pattern: LEFT bundle branch block (LBBB — broad/notched R in I, aVL, V5–V6; deep S in V1) vs RIGHT bundle branch block (RBBB — rSR'/"rabbit ears" in V1, wide slurred S in I, V6); note fascicular blocks (LAFB/LPFB), intraventricular conduction delay, paced QRS, or delta wave/pre-excitation)
-Axis: (normal / left axis deviation / right axis deviation / extreme — if determinable)
-AV block / conduction: (explicitly classify any heart block — first-degree (PR > 200 ms); second-degree Mobitz I/Wenckebach (progressive PR lengthening then a dropped beat); second-degree Mobitz II (constant PR with intermittent dropped QRS); high-grade/2:1 block; third-degree/complete heart block with AV dissociation; also note any bundle/fascicular block contributing to conduction disease)
-ST/T changes: (ST elevation or depression with the SPECIFIC leads and the territory; T-wave inversions/hyperacute T waves; note that LBBB or paced rhythm can obscure ST analysis and mention Sgarbossa criteria if relevant)
-Ectopy/other: (PVCs, PACs, pacing spikes, electrical alternans, low voltage, artifact, etc.)
-Interpretation: (the overall diagnostic impression / most likely diagnosis — e.g., "acute inferior STEMI", "complete heart block with junctional escape", "atrial fibrillation with RVR and RBBB", "new LBBB")
-Transport action plan: (concise, prioritized recommendations appropriate for a critical-care flight crew for THIS rhythm/finding — e.g., for symptomatic bradycardia/high-grade or complete heart block: atropine, transcutaneous pacing pads ready/active with sedation, chronotropic infusion such as epinephrine or dopamine, treat reversible causes; for STEMI: activate cath lab/notify receiving, ASA, nitro/heparin per protocol and contraindications, defib pads on; for unstable tachydysrhythmia: synchronized cardioversion vs rate/rhythm control; for wide-complex tachycardia of uncertain origin: treat as VT; always include continuous monitoring, defib/pacer pads, IV access, and what to anticipate en route. End this section with: "Confirm with medical control / receiving physician and follow protocol; clinical judgment overrides.")
-Do not add other disclaimers. Return plain text only, no markdown.`;
     try {
-      const text = await callClaudeVisionMulti(prompt, files);
+      const text = await callClaudeVisionMulti(EKG_INTERP_PROMPT, files);
       const ta = $('ekgInterp');
       const clean = String(text || '').trim();
       ta.value = ta.value.trim() ? ta.value.trim() + '\n\n' + clean : clean;
@@ -5045,8 +5051,11 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
         <div class="row-3">
           <div><label>EtCO₂</label><input type="text" value="${attrEsc(v.etco2)}" onchange="updFlight('${e.id}','vitals.etco2',this.value)"></div>
           <div><label>Temp</label><input type="text" value="${attrEsc(v.temp)}" onchange="updFlight('${e.id}','vitals.temp',this.value)"></div>
-          <div><label>Rhythm</label><input type="text" value="${attrEsc(v.rhythm)}" onchange="updFlight('${e.id}','vitals.rhythm',this.value)"></div>
+          <div><label>Rhythm</label><input type="text" id="fnRhythm_${e.id}" value="${attrEsc(v.rhythm)}" onchange="updFlight('${e.id}','vitals.rhythm',this.value)"></div>
         </div>
+        <button type="button" class="calc-btn" id="rhythmBtn_${e.id}" style="width:auto;margin-top:4px" onclick="pickFlightRhythmPhoto('${e.id}')">🫀 Interpret rhythm strip (photo)</button>
+        <span id="rhythmStatus_${e.id}" class="hint" style="margin-left:8px"></span>
+        <div id="rhythmOut_${e.id}" class="ai-out ${e.rhythmInterp ? 'show' : ''}">${e.rhythmInterp ? '<strong>Rhythm interpretation</strong><br>' + formatAiText(e.rhythmInterp) : ''}</div>
         <div class="sub-h">Ventilator settings</div>
         <div class="row-4">
           <div><label>Mode</label><input type="text" value="${attrEsc(vt.mode)}" onchange="updFlight('${e.id}','vent.mode',this.value)"></div>
@@ -5087,7 +5096,7 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
     const prompt = `You are a critical-care flight nurse documenting ONE timed in-flight event during a HEMS transport. Write a clear, professional clinical paragraph (past tense, factual) describing this event. BEGIN the paragraph with the time. Use ONLY the data provided; do not invent values.
 Timed entry data:
 ${JSON.stringify(e, null, 2)}
-Guidance: weave in the vital signs, the oxygen/airway delivery device and flow, any ventilator setting change WITH the stated reason and the result, each IV push medication (drug, dose, route, response), and each IV drip (drug, concentration, titration direction, new rate, the reason for the change, and the outcome). If a ventilator or drip change is present, clearly state why it was made and what the end result was. Incorporate the comment. Return ONLY the paragraph text.`;
+Guidance: weave in the vital signs, the oxygen/airway delivery device and flow, any ventilator setting change WITH the stated reason and the result, each IV push medication (drug, dose, route, response), and each IV drip (drug, concentration, titration direction, new rate, the reason for the change, and the outcome). If a ventilator or drip change is present, clearly state why it was made and what the end result was. If a rhythm-strip interpretation ("rhythmInterp") is present, summarize the cardiac rhythm/EKG findings and any resulting action. Incorporate the comment. Return ONLY the paragraph text.`;
     try {
       const resp = await callAnthropic(prompt);
       e.narrative = resp.trim();
@@ -5099,6 +5108,39 @@ Guidance: weave in the vital signs, the oxygen/airway delivery device and flow, 
     }
   }
   function copyFlightNarr(id){ const e = flightById(id); if (e && e.narrative && navigator.clipboard) navigator.clipboard.writeText(e.narrative); }
+  // Per-entry rhythm-strip interpretation — photograph the monitor strip for THIS timed
+  // entry and run the same detailed EKG read (BBB, P-wave/QRS morphology, AV blocks, plan).
+  let __rhythmEntryId = null;
+  function pickFlightRhythmPhoto(id){
+    __rhythmEntryId = id;
+    const inp = $('flightRhythmFile');
+    if (inp) { inp.value = ''; inp.click(); }
+  }
+  async function onFlightRhythmPhoto(event){
+    const file = (event.target.files || [])[0];
+    event.target.value = '';
+    if (!file) return;
+    const id = __rhythmEntryId;
+    const e = flightById(id);
+    if (!e) return;
+    if (!confirmPhi('in-flight rhythm strip')) return;
+    const btn = document.getElementById('rhythmBtn_' + id);
+    const status = document.getElementById('rhythmStatus_' + id);
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Interpreting…'; }
+    if (status) { status.textContent = ''; status.style.color = ''; }
+    try {
+      const text = await callClaudeVisionMulti(EKG_INTERP_PROMPT, [file]);
+      const clean = String(text || '').trim();
+      e.rhythmInterp = clean;
+      // Pull a concise impression into the single-line Rhythm field
+      const m = clean.match(/^\s*Interpretation:\s*(.+)$/im) || clean.match(/^\s*Rhythm:\s*(.+)$/im);
+      if (m) { e.vitals = e.vitals || {}; e.vitals.rhythm = m[1].trim(); }
+      renderFlightEntries();
+    } catch (err) {
+      if (status) { status.textContent = 'Failed: ' + (err.message || err); status.style.color = '#991b1b'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = '🫀 Interpret rhythm strip (photo)'; }
+    }
+  }
   async function combineFlightNarrative(){
     const settings = loadSettings();
     if (!settings.anthropic) { alert('Anthropic API key required. Open Settings to add one.'); openSettings(); return; }
@@ -5108,7 +5150,7 @@ Guidance: weave in the vital signs, the oxygen/airway delivery device and flow, 
     const btn = $('flightCombineBtn'), out = $('flightCombinedOut');
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Combining…';
     out.classList.add('show'); out.innerHTML = '<span class="spinner"></span> Building combined in-flight narrative…';
-    const prompt = `You are a critical-care flight crew documentarian. Using the chart data and the chronological list of timed in-flight entries, write ONE clear, flowing clinical narrative in paragraph form (past tense, factual) documenting the transport STARTING FROM FIRST PATIENT CONTACT and proceeding through each timed event in order. Each timed event should read as its own paragraph beginning with the time. For every ventilator or drip change, state the reason it was made and the resulting effect. Do not invent data; omit anything not provided.
+    const prompt = `You are a critical-care flight crew documentarian. Using the chart data and the chronological list of timed in-flight entries, write ONE clear, flowing clinical narrative in paragraph form (past tense, factual) documenting the transport STARTING FROM FIRST PATIENT CONTACT and proceeding through each timed event in order. Each timed event should read as its own paragraph beginning with the time. For every ventilator or drip change, state the reason it was made and the resulting effect. For any entry with a rhythm-strip interpretation ("rhythmInterp"), incorporate the cardiac rhythm/EKG findings and the action taken. Do not invent data; omit anything not provided.
 INITIAL CONTACT / CHART DATA:
 ${JSON.stringify({ unit: data.statFlight, aircraft: data.aircraft, sending: data.sending, receiving: data.receiving, patient: data.patient, diagnosis: data.diagnosis, initialVitals: data.vitals, baselineVent: data.vent, baselineDrips: data.drips, pushMeds: data.pushMeds, ivAccess: data.ivs }, null, 2)}
 CHRONOLOGICAL TIMED ENTRIES:
