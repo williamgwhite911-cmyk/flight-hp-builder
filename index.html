@@ -1595,6 +1595,19 @@
           <div class="hint">The patient's pre-existing home medications. Pick from the list (generic or brand) or type your own; the dose suggestions and a short "used for" summary auto-fill. These are reconciled against allergies — any conflict shows a red alert at the top.</div>
           <div id="homeMedRows"></div>
           <button type="button" class="calc-btn" style="width:auto;margin-top:6px" onclick="addHomeMedRow()">➕ Add home medication</button>
+
+          <div class="ai-tool-block" style="margin-top:12px">
+            <div style="font-weight:600;color:#0c4a6e;font-size:13px">📷 Photograph medication bottles</div>
+            <div class="hint">Take a clear photo of each prescription bottle label (one or several bottles). AI reads the medication name, strength (mg), and directions into the rows above, and reports the <b>name printed on the label</b> so you can confirm the medications belong to this patient. Cover other patients' labels.</div>
+            <input type="file" id="bottleFile" accept="image/*" multiple onchange="handleBottlePhotos(event)" style="display:none">
+            <div class="photo-src-btns" style="margin-top:6px">
+              <button type="button" class="calc-btn" onclick="pickPhoto('bottleFile','camera')">📷 Take Photo</button>
+              <button type="button" class="calc-btn" onclick="pickPhoto('bottleFile','library')">🖼️ Choose from Library</button>
+            </div>
+            <div id="bottleStatus" class="hint"></div>
+            <div id="bottleVerify"></div>
+          </div>
+
           <div class="ocr-block" id="ocrBlockHomeMeds" style="display:none;margin-top:10px">
             <label class="ocr-label" for="ocrHomeMedsFile">📷 Home-med list photo (pilot) — cover patient identifiers first</label>
             <input type="file" id="ocrHomeMedsFile" accept="image/*" multiple onchange="handleHomeMedsPhoto(event)" style="display:none">
@@ -5730,6 +5743,65 @@ Do not invent medications or doses you cannot read. Return ONLY the JSON object,
       meds.forEach(m => { if (m && (m.name || m.dose)) addHomeMedRow({ name: m.name || '', dose: m.dose || '' }); });
       checkAllergyConflicts();
       if (status) { status.innerHTML = '✓ Added ' + meds.length + ' home medication' + (meds.length === 1 ? '' : 's') + '. Review and confirm.'; status.style.color = '#16a34a'; }
+    } catch (err) {
+      if (status) { status.textContent = 'Failed: ' + (err.message || err); status.style.color = '#991b1b'; }
+    } finally {
+      event.target.value = '';
+    }
+  }
+
+  // ====== Medication BOTTLE photos → structured rows + patient-name verification ======
+  function namesLikelyMatch(a, b){
+    const ta = normMed(a).split(' ').filter(w => w.length >= 2);
+    const tb = normMed(b).split(' ').filter(w => w.length >= 2);
+    if (!ta.length || !tb.length) return null;
+    const shared = ta.filter(w => tb.indexOf(w) >= 0);
+    return shared.length >= 2; // need at least first + last name overlap
+  }
+  async function handleBottlePhotos(event){
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    if (!confirmPhi('medication bottle label')) { event.target.value = ''; return; }
+    const status = $('bottleStatus'), verify = $('bottleVerify');
+    const n = files.length;
+    if (status) { status.innerHTML = `<span class="spinner"></span> Reading ${n} bottle photo${n === 1 ? '' : 's'}…`; status.style.color = '#5b21b6'; }
+    if (verify) verify.innerHTML = '';
+    const prompt = `Examine the photo(s) of prescription medication BOTTLE labels (one or more bottles). For EACH distinct bottle/label, read exactly what is printed. Return ONLY a JSON object:
+{ "meds": [ { "name": "drug name (generic and/or brand as printed)", "strength": "strength with units, e.g., 20 mg", "directions": "the sig/directions, e.g., take 1 tablet by mouth daily", "quantity": "qty if shown", "patientName": "the patient name printed on the label", "prescriber": "prescriber if shown", "pharmacy": "pharmacy if shown", "rxNumber": "Rx# if shown" } ] }
+- Read ONLY what is actually printed; do not guess or infer. Omit any field you cannot read.
+- Include the patientName from EACH label exactly as printed (this is used to confirm the medications belong to the patient).
+Return ONLY the JSON object, no markdown.`;
+    try {
+      const text = await callClaudeVisionMulti(prompt, files);
+      const data = parseAiJson(text);
+      const meds = Array.isArray(data.meds) ? data.meds : [];
+      if (!meds.length) { if (status) { status.textContent = 'No bottle labels read. Try a clearer, well-lit photo of the label.'; status.style.color = '#991b1b'; } event.target.value = ''; return; }
+      // Drop the seeded empty row if blank
+      const wrap = $('homeMedRows');
+      if (wrap) { const rows = wrap.querySelectorAll('.hm-row'); if (rows.length === 1 && !rows[0].querySelector('.hm-name').value.trim()) rows[0].remove(); }
+      meds.forEach(m => {
+        if (!m || (!m.name && !m.strength)) return;
+        const dose = [m.strength, m.directions].filter(Boolean).join(' — ');
+        addHomeMedRow({ name: (m.name || '').trim(), dose: dose.trim() });
+      });
+      checkAllergyConflicts();
+      // Patient-name verification against the chart
+      const chart = val('ptName');
+      const labelNames = [];
+      meds.forEach(m => { const nm = (m.patientName || '').trim(); if (nm && labelNames.map(x => x.toLowerCase()).indexOf(nm.toLowerCase()) < 0) labelNames.push(nm); });
+      if (verify) {
+        if (!labelNames.length) {
+          verify.innerHTML = '<div class="hint" style="color:#92400e">No patient name was readable on the label(s) — verify these medications belong to the patient manually.</div>';
+        } else {
+          verify.innerHTML = labelNames.map(ln => {
+            const m = chart ? namesLikelyMatch(chart, ln) : null;
+            if (m === true) return `<div style="color:#166534;font-weight:600;margin-top:4px">✓ Label name "${escapeHtml(ln)}" matches the chart patient (${escapeHtml(chart)}).</div>`;
+            if (m === false) return `<div style="color:#991b1b;font-weight:700;margin-top:4px">⚠ Label name "${escapeHtml(ln)}" does NOT match the chart patient (${escapeHtml(chart)}) — verify these are the patient's medications before use.</div>`;
+            return `<div style="color:#92400e;font-weight:600;margin-top:4px">Label name: "${escapeHtml(ln)}". Enter the patient's name in Demographics to auto-verify the match.</div>`;
+          }).join('');
+        }
+      }
+      if (status) { status.innerHTML = '✓ Added ' + meds.length + ' medication' + (meds.length === 1 ? '' : 's') + ' from the bottle label(s). Review name, strength, and directions.'; status.style.color = '#16a34a'; }
     } catch (err) {
       if (status) { status.textContent = 'Failed: ' + (err.message || err); status.style.color = '#991b1b'; }
     } finally {
