@@ -2705,6 +2705,41 @@
     return files;
   }
 
+  // Robustly pull a JSON value out of an AI text response. Handles ```code fences```,
+  // leading/trailing prose, and "smart" quotes. Returns the parsed value, or throws a
+  // clear error if no JSON object/array can be recovered.
+  function parseAiJson(raw){
+    if (raw == null) throw new Error('AI returned an empty response.');
+    let t = String(raw).trim();
+    // strip a leading ```json / ``` fence and trailing ``` fence if present
+    t = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+    const tryParse = (s) => { try { return { ok: true, val: JSON.parse(s) }; } catch (e) { return { ok: false }; } };
+    let r = tryParse(t);
+    if (r.ok) return r.val;
+    // find the first balanced {...} or [...] block, ignoring braces inside strings
+    const open = t.search(/[{[]/);
+    if (open >= 0) {
+      const startCh = t[open];
+      const closeCh = startCh === '{' ? '}' : ']';
+      let depth = 0, inStr = false, esc = false;
+      for (let i = open; i < t.length; i++) {
+        const c = t[i];
+        if (inStr) {
+          if (esc) esc = false;
+          else if (c === '\\') esc = true;
+          else if (c === '"') inStr = false;
+        } else if (c === '"') inStr = true;
+        else if (c === startCh) depth++;
+        else if (c === closeCh) { depth--; if (depth === 0) { const block = t.slice(open, i + 1); r = tryParse(block); if (r.ok) return r.val; break; } }
+      }
+    }
+    // last resort: normalize smart quotes and retry
+    const norm = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+    r = tryParse(norm);
+    if (r.ok) return r.val;
+    throw new Error('Could not read the AI response as data. Try again, or retake the photo more clearly.');
+  }
+
   async function extractFaceSheetData(){
     if (!faceSheetPhotoDataUrls.length) { alert('Upload at least one face sheet/wristband photo first.'); return; }
     if (!confirmPhi('facility face sheet / wristband')) return;
@@ -2717,9 +2752,8 @@
 - Omit fields you cannot read. Do not invent values.
 Return ONLY the JSON object, no markdown.`;
     try {
-      let text = await callClaudeVisionMulti(prompt, files);
-      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      const data = JSON.parse(text);
+      const text = await callClaudeVisionMulti(prompt, files);
+      const data = parseAiJson(text);
       const setIfEmpty = (id, v) => { if (v && $(id) && !$(id).value) $(id).value = v; };
       setIfEmpty('ptMRN', data.mrn);
       setIfEmpty('ptName', data.name);
@@ -2756,9 +2790,8 @@ Return ONLY the JSON object, no markdown.`;
 { "name": "Last, First Middle", "dob": "YYYY-MM-DD", "address": "Full street address", "height": "5'10\\"" or "70 in", "weight": "180 lb", "sex": "M|F", "dlNumber": "license/ID number", "dlExpiration": "MM/DD/YYYY" }
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON object, no markdown.`;
     try {
-      let text = await callClaudeVisionMulti(prompt, files);
-      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      const data = JSON.parse(text);
+      const text = await callClaudeVisionMulti(prompt, files);
+      const data = parseAiJson(text);
       const setIfEmpty = (id, v) => { if (v && $(id) && !$(id).value) $(id).value = v; };
       setIfEmpty('ptName', data.name);
       setIfEmpty('ptDob', data.dob);
@@ -3969,6 +4002,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
       body: JSON.stringify({
         model: settings.model,
         max_tokens: 1024,
+        system: NO_FABRICATION_SYSTEM,
         messages: [{
           role: 'user',
           content: [
@@ -4080,8 +4114,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
       'Return ONLY the JSON object — no markdown.';
     try {
       const text = await callClaudeVisionMulti(prompt, files);
-      const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      const data = JSON.parse(clean);
+      const data = parseAiJson(text);
       const snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
       if (!snapshots.length) {
         status.textContent = 'No vitals extracted. Try clearer photos.';
@@ -4117,9 +4150,8 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
 - "channel": pump channel/letter if applicable
 Omit any field you cannot read. Do not invent values. Return ONLY the JSON, no markdown.`;
     try {
-      let text = await callClaudeVisionMulti(prompt, files);
-      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      const data = JSON.parse(text);
+      const text = await callClaudeVisionMulti(prompt, files);
+      const data = parseAiJson(text);
       const infusions = Array.isArray(data.infusions) ? data.infusions : [];
       if (!infusions.length) {
         status.textContent = 'No infusions detected. Try a clearer photo.';
@@ -4213,8 +4245,7 @@ Omit any field you cannot read. Do not invent values. Return ONLY the JSON.`;
       });
       const data = {};
       texts.forEach(t => {
-        const cleaned = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-        try { const obj = JSON.parse(cleaned); Object.keys(obj || {}).forEach(k => { if (obj[k] != null && obj[k] !== '') data[k] = obj[k]; }); } catch (e) { /* skip unparseable chunk */ }
+        try { const obj = parseAiJson(t); Object.keys(obj || {}).forEach(k => { if (obj[k] != null && obj[k] !== '') data[k] = obj[k]; }); } catch (e) { /* skip unparseable chunk */ }
       });
       // Ensure vent fields are visible
       document.querySelector('input[name=vented][value=yes]').checked = true;
@@ -4359,8 +4390,7 @@ Return ONLY the JSON array.`;
       });
       let arr = [];
       texts.forEach(t => {
-        const cleaned = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-        try { let part = JSON.parse(cleaned); if (!Array.isArray(part)) part = [part]; arr.push(...part); } catch (e) { /* skip unparseable chunk */ }
+        try { let part = parseAiJson(t); if (!Array.isArray(part)) part = [part]; arr.push(...part); } catch (e) { /* skip unparseable chunk */ }
       });
       let added = 0;
       arr.forEach(a => { if (a && (a.ph || a.pco2 || a.po2)) { a.source = 'photo'; serialAbgs.push(a); added++; } });
@@ -4481,6 +4511,7 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
       body: JSON.stringify({
         model: settings.model,
         max_tokens: maxTokens || 8192,
+        system: NO_FABRICATION_SYSTEM,
         messages: [{ role: 'user', content: [...images, { type: 'text', text: prompt }] }],
       }),
     });
@@ -5028,8 +5059,7 @@ Return ONLY the JSON array.`;
       });
       let arr = [];
       texts.forEach(t => {
-        const cleaned = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-        try { let part = JSON.parse(cleaned); if (!Array.isArray(part)) part = [part]; arr.push(...part); } catch (e) { /* skip unparseable chunk */ }
+        try { let part = parseAiJson(t); if (!Array.isArray(part)) part = [part]; arr.push(...part); } catch (e) { /* skip unparseable chunk */ }
       });
       let added = 0;
       arr.forEach(o => {
@@ -5171,9 +5201,8 @@ Per-result rules:
 
 CRITICAL: extract EVERY value present in the photo(s) — do not summarize, do not skip "normal" values, do not stop at five or ten labs. If a panel has 20 results listed, return all 20. Do not invent values. Return ONLY the JSON object, no markdown.`;
     try {
-      let text = await callClaudeVisionMulti(prompt, files);
-      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      const data = JSON.parse(text);
+      const text = await callClaudeVisionMulti(prompt, files);
+      const data = parseAiJson(text);
       const results = Array.isArray(data.results) ? data.results : [];
       if (!results.length) {
         status.textContent = 'No labs detected. Try a clearer photo.';
@@ -5343,6 +5372,20 @@ ${JSON.stringify(data, null, 2)}`;
     return `API error ${status}: ${raw.slice(0, 200)}`;
   }
 
+  // Enforced on EVERY AI call (narratives, interpretations, and photo/transcript extraction)
+  // so the model can never add information that was not provided.
+  const NO_FABRICATION_SYSTEM =
+    'You are a clinical documentation assistant for a critical-care flight crew. ' +
+    'ABSOLUTE, NON-NEGOTIABLE RULE: never fabricate, infer, assume, estimate, or embellish any clinical information. ' +
+    'Use ONLY the data explicitly provided in the user message and any attached images. ' +
+    'Never invent or guess vital signs, lab values, medication names or doses, times, dates, patient or clinician names, ' +
+    'facility names, diagnoses, ventilator/pump settings, history, or clinical findings. ' +
+    'If a value or detail is not present in the provided data, OMIT it or write "not documented" / "not recorded" — ' +
+    'do NOT fill it in with typical, expected, or plausible values. Leaving missing information out is correct and required. ' +
+    'Preserve every number, time, dose, and name exactly as given; do not round or normalize. ' +
+    'Do not add interpretation, events, or narrative detail that the provided data does not support. ' +
+    'You may organize, summarize, and phrase the provided facts professionally, but you must not introduce any new fact.';
+
   async function callAnthropic(prompt){
     const settings = loadSettings();
     if (!settings.anthropic) throw new Error('No API key set. Open Settings.');
@@ -5357,6 +5400,7 @@ ${JSON.stringify(data, null, 2)}`;
       body: JSON.stringify({
         model: settings.model,
         max_tokens: 4096,
+        system: NO_FABRICATION_SYSTEM,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -5386,9 +5430,8 @@ ${JSON.stringify(data, null, 2)}`;
     setStatus('<span class="spinner"></span>Generating H&P with AI…');
     try {
       const prompt = buildPrompt(data);
-      let response = await callAnthropic(prompt);
-      response = response.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-      const parsed = JSON.parse(response);
+      const response = await callAnthropic(prompt);
+      const parsed = parseAiJson(response);
       $('narrativeOut').textContent = parsed.narrative || '';
       $('templateOut').textContent = parsed.template || '';
       $('narrativeOut').classList.add('polished');
@@ -5462,9 +5505,8 @@ ${JSON.stringify(data, null, 2)}`;
 - For an IV/SYRINGE PUMP: drug name, concentration, rate (mL/hr and/or mcg/kg/min or units), volume infused (VTBI/remaining).
 - Use only what is visible; omit unreadable fields; do not invent values.
 Return ONLY the JSON array.`;
-      let text = await callClaudeVisionMulti(prompt, files);
-      text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      let arr = JSON.parse(text);
+      const text = await callClaudeVisionMulti(prompt, files);
+      let arr = parseAiJson(text);
       if (!Array.isArray(arr)) arr = [arr];
       // append to existing log (so multiple batches accumulate)
       inflightLogData = inflightLogData.concat(arr.filter(e => e && (e.summary || (e.values && Object.keys(e.values).length))));
@@ -6818,6 +6860,7 @@ Return ONLY the JSON object. No markdown fencing.`;
         body: JSON.stringify({
           model: settings.model,
           max_tokens: 8192,
+          system: NO_FABRICATION_SYSTEM,
           messages: [{ role: 'user', content }],
         }),
       });
@@ -6829,8 +6872,7 @@ Return ONLY the JSON object. No markdown fencing.`;
       if (!data.content || !data.content[0] || !data.content[0].text) {
         throw new Error('Unexpected API response');
       }
-      let text = data.content[0].text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      const parsed = JSON.parse(text);
+      const parsed = parseAiJson(data.content[0].text);
 
       if (parsed.extracted) {
         applyExtractedData(parsed.extracted);
@@ -6927,8 +6969,7 @@ ${transcript}`;
 
     try {
       const response = await callAnthropic(prompt);
-      let json = response.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-      const data = JSON.parse(json);
+      const data = parseAiJson(response);
       applyExtractedData(data);
       $('extractStatus').textContent = '✓ Form fields populated. Review and edit before generating final H&P.';
       $('extractStatus').style.color = '#16a34a';
