@@ -1413,6 +1413,29 @@
 
     <fieldset>
       <details>
+        <summary>Diagnostics PTA — Cardiac / EKG</summary>
+        <div class="fieldset-body">
+          <label>EKG / Rhythm Strip Photo (stored on device; embeds in printed report)</label>
+          <input type="file" id="ekgFile" accept="image/*" multiple onchange="handleEkgPhoto(event)" style="display:none">
+          <div class="photo-src-btns">
+            <button type="button" class="calc-btn" onclick="pickPhoto('ekgFile','camera')">📷 Take Photo</button>
+            <button type="button" class="calc-btn" onclick="pickPhoto('ekgFile','library')">🖼️ Choose from Library</button>
+          </div>
+          <div id="ekgPreview"></div>
+          <div id="ekgInterpBlock" style="display:none;margin-top:6px">
+            <button type="button" class="calc-btn" onclick="interpretEkg()">🤖 Interpret EKG (sends photo to AI)</button>
+            <div id="ekgStatus" class="hint"></div>
+          </div>
+
+          <label style="margin-top:10px">EKG Interpretation / Diagnosis</label>
+          <textarea id="ekgInterp" placeholder="Rate: 88 bpm; Rhythm: normal sinus; Axis: normal; Intervals: PR 160 ms, QRS 90 ms, QTc 430 ms; ST/T: ST elevation in II, III, aVF with reciprocal depression in I, aVL; Interpretation: acute inferior STEMI"></textarea>
+          <button type="button" class="clear-btn" onclick="$('ekgInterp').value=''" style="width:100%;margin-top:4px">Clear interpretation</button>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
         <summary>Diagnostics PTA — Labs</summary>
         <div class="fieldset-body">
           <label>Notable Labs (free text)</label>
@@ -2694,6 +2717,73 @@
     if (ocr) ocr.style.display = 'block'; // auto-fill is available whenever a face-sheet photo is present
   }
 
+  // ====== EKG / rhythm strip photos (array; embedded in print) ======
+  let ekgPhotoDataUrls = [];
+  function handleEkgPhoto(event){
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    let remaining = files.length;
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        ekgPhotoDataUrls.push(e.target.result);
+        if (--remaining === 0) renderEkgPreview();
+      };
+      reader.onerror = () => { if (--remaining === 0) renderEkgPreview(); };
+      reader.readAsDataURL(file);
+    });
+    event.target.value = '';
+  }
+  function clearEkgPhotos(){ ekgPhotoDataUrls = []; renderEkgPreview(); }
+  function removeEkgPhotoAt(idx){ ekgPhotoDataUrls.splice(idx, 1); renderEkgPreview(); }
+  function renderEkgPreview(){
+    const wrap = $('ekgPreview');
+    if (!wrap) return;
+    const block = $('ekgInterpBlock');
+    if (!ekgPhotoDataUrls.length) {
+      wrap.innerHTML = '';
+      if (block) block.style.display = 'none';
+      return;
+    }
+    const thumbs = ekgPhotoDataUrls.map((url, idx) => `
+      <div class="photo-thumb">
+        <img src="${url}" alt="EKG ${idx + 1}">
+        <button type="button" class="photo-thumb-remove" onclick="removeEkgPhotoAt(${idx})" title="Remove">×</button>
+      </div>
+    `).join('');
+    wrap.innerHTML = `
+      <div class="photo-thumbs">${thumbs}</div>
+      <button type="button" class="clear-btn" onclick="clearEkgPhotos()" style="margin-top:4px">Clear all (${ekgPhotoDataUrls.length})</button>
+    `;
+    if (block) block.style.display = 'block'; // interpret button available whenever an EKG photo is present
+  }
+  async function interpretEkg(){
+    if (!ekgPhotoDataUrls.length) { alert('Upload at least one EKG/rhythm strip photo first.'); return; }
+    if (!confirmPhi('EKG / rhythm strip')) return;
+    const status = $('ekgStatus');
+    const n = ekgPhotoDataUrls.length;
+    if (status) { status.innerHTML = `<span class="spinner"></span> Interpreting ${n} EKG image${n === 1 ? '' : 's'}…`; status.style.color = '#5b21b6'; }
+    const files = await dataUrlsToFiles(ekgPhotoDataUrls, 'ekg');
+    const prompt = `You are a critical-care flight clinician interpreting a 12-lead EKG and/or rhythm strip photo for a transport chart. Read ONLY what is visible in the image(s); do not invent values you cannot see. Provide a concise interpretation in plain text using these labeled lines (omit any line you cannot determine from the image):
+Rate: (bpm)
+Rhythm: (e.g., normal sinus, atrial fibrillation, complete heart block, paced)
+Axis: (normal / LAD / RAD if determinable)
+Intervals: PR, QRS, QTc (with values in ms if measurable)
+ST/T changes: (ST elevation/depression with the specific leads; T-wave changes)
+Ectopy/other: (PVCs, blocks, pacing spikes, artifact, etc.)
+Interpretation: (the overall diagnostic impression / most likely diagnosis — e.g., "acute inferior STEMI", "atrial fibrillation with RVR", "normal sinus rhythm")
+Do not add disclaimers. Return plain text only, no markdown.`;
+    try {
+      const text = await callClaudeVisionMulti(prompt, files);
+      const ta = $('ekgInterp');
+      const clean = String(text || '').trim();
+      ta.value = ta.value.trim() ? ta.value.trim() + '\n\n' + clean : clean;
+      if (status) { status.innerHTML = '✓ Interpretation added below. Review and correct before use.'; status.style.color = '#16a34a'; }
+    } catch (err) {
+      if (status) { status.textContent = 'Interpretation failed: ' + (err.message || err); status.style.color = '#991b1b'; }
+    }
+  }
+
   // Convert stored data URLs back to File objects for the vision API call.
   async function dataUrlsToFiles(urls, baseName){
     const files = [];
@@ -3757,6 +3847,7 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
       onset: val('onset'),
       pmh: val('pmh'),
       imaging: val('imaging'),
+      ekg: val('ekgInterp'),
       labs: val('labs'),
       labsStructured: gatherLabRows(),
       bloodGas: gatherBloodGas(),
@@ -3889,6 +3980,7 @@ CRITICAL INSTRUCTIONS:
 - Include allergies prominently in the template under a dedicated "Allergies:" line. If "allergies.status" is "nkda", write "NKDA". If "nka", write "NKA". Otherwise list each allergen with type and reaction (e.g., "Penicillin (Medication) — anaphylaxis; Shellfish (Food) — hives").
 - If "vitalsTrend" has entries, render them in the template under a "Vital Signs Trend (in-flight):" line as a compact list ordered by time (e.g., "08:42 BP 138/82, HR 92, RR 18, SpO2 96%, EtCO2 35; 08:55 BP 122/74, HR 88, RR 16, SpO2 98%, EtCO2 36"). In the narrative, reference any clinically significant trend (e.g., "BP normalized after fluid resuscitation between 08:42 and 09:10").
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
+- If "ekg" is provided, include the EKG interpretation/diagnosis under the diagnostic studies in both the narrative and the template (e.g., "EKG: acute inferior STEMI"). Use only what the "ekg" text states; do not infer additional findings.
 - Use professional EMS/clinical language.
 - Do not use em dashes.
 - Return your response as a single JSON object with THREE keys:
@@ -5986,6 +6078,8 @@ ${JSON.stringify(data, null, 2)}`;
     renderLicensePreview();
     faceSheetPhotoDataUrls = [];
     renderFaceSheetPreview();
+    ekgPhotoDataUrls = [];
+    renderEkgPreview();
     inflightPhotoDataUrls = []; inflightLogData = [];
     if ($('inflightThumbs')) renderInflightThumbs();
     if ($('inflightLog')) renderInflightLog();
@@ -7422,6 +7516,20 @@ ${transcript}`;
     if (d.imaging) {
       html += '<h2>Imaging</h2>';
       html += paragraphize(d.imaging);
+    }
+
+    // Cardiac / EKG — interpretation text plus the strip image(s)
+    const hasEkgPhoto = ekgPhotoDataUrls && ekgPhotoDataUrls.length;
+    if (d.ekg || hasEkgPhoto) {
+      html += '<h2>Cardiac / EKG</h2>';
+      if (d.ekg) html += paragraphize(d.ekg);
+      if (hasEkgPhoto) {
+        html += '<div class="license-extras">';
+        ekgPhotoDataUrls.forEach((url, i) => {
+          html += `<div class="patient-photo"><img src="${url}" alt="EKG ${i + 1}"><div class="photo-caption">EKG / rhythm strip${ekgPhotoDataUrls.length > 1 ? ' #' + (i + 1) : ''}</div></div>`;
+        });
+        html += '</div>';
+      }
     }
 
     // Labs — free-text paragraphs, then structured table as a separate block
