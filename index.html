@@ -1606,6 +1606,7 @@
             </div>
             <div id="bottleStatus" class="hint"></div>
             <div id="bottleVerify"></div>
+            <div id="bottlePreview"></div>
           </div>
 
           <div class="ocr-block" id="ocrBlockHomeMeds" style="display:none;margin-top:10px">
@@ -5758,11 +5759,30 @@ Do not invent medications or doses you cannot read. Return ONLY the JSON object,
     const shared = ta.filter(w => tb.indexOf(w) >= 0);
     return shared.length >= 2; // need at least first + last name overlap
   }
+  let bottlePhotoDataUrls = [];
+  function renderBottlePreview(){
+    const wrap = $('bottlePreview'); if (!wrap) return;
+    if (!bottlePhotoDataUrls.length) { wrap.innerHTML = ''; return; }
+    const thumbs = bottlePhotoDataUrls.map((url, idx) => `
+      <div class="photo-thumb">
+        <img src="${url}" alt="Bottle ${idx + 1}">
+        <button type="button" class="photo-thumb-remove" onclick="removeBottlePhotoAt(${idx})" title="Remove">×</button>
+      </div>`).join('');
+    wrap.innerHTML = `<div class="photo-thumbs" style="margin-top:6px">${thumbs}</div>
+      <button type="button" class="clear-btn" onclick="clearBottlePhotos()" style="margin-top:4px">Clear all (${bottlePhotoDataUrls.length})</button>`;
+  }
+  function removeBottlePhotoAt(idx){ bottlePhotoDataUrls.splice(idx, 1); renderBottlePreview(); if (typeof scheduleAutosave === 'function') scheduleAutosave(); }
+  function clearBottlePhotos(){ bottlePhotoDataUrls = []; renderBottlePreview(); if (typeof scheduleAutosave === 'function') scheduleAutosave(); }
   async function handleBottlePhotos(event){
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
     if (!confirmPhi('medication bottle label')) { event.target.value = ''; return; }
     const status = $('bottleStatus'), verify = $('bottleVerify');
+    // Keep a compressed copy of each bottle photo on the record as medication-reconciliation proof
+    for (const file of files) {
+      try { bottlePhotoDataUrls.push(await compressDataUrlForStorage(await readFileAsDataUrl(file))); } catch (e) { /* keep going */ }
+    }
+    renderBottlePreview();
     const n = files.length;
     if (status) { status.innerHTML = `<span class="spinner"></span> Reading ${n} bottle photo${n === 1 ? '' : 's'}…`; status.style.color = '#5b21b6'; }
     if (verify) verify.innerHTML = '';
@@ -6554,6 +6574,8 @@ ${JSON.stringify(data, null, 2)}`;
     renderFaceSheetPreview();
     ekgPhotoDataUrls = [];
     renderEkgPreview();
+    bottlePhotoDataUrls = [];
+    renderBottlePreview();
     inflightPhotoDataUrls = []; inflightLogData = [];
     if ($('inflightThumbs')) renderInflightThumbs();
     if ($('inflightLog')) renderInflightLog();
@@ -6674,6 +6696,7 @@ ${JSON.stringify(data, null, 2)}`;
       inflightLog: (typeof inflightLogData !== 'undefined') ? inflightLogData.slice() : [],
       dx: dxSelected.slice(),
       ekgPhotos: (typeof ekgPhotoDataUrls !== 'undefined') ? ekgPhotoDataUrls.slice() : [],
+      bottlePhotos: (typeof bottlePhotoDataUrls !== 'undefined') ? bottlePhotoDataUrls.slice() : [],
       outputs: { narrative: out('narrativeOut'), template: out('templateOut'), cct: out('cctOut'), combined: out('combinedOut'), camts11: out('camts11Out') },
     };
   }
@@ -6735,6 +6758,7 @@ ${JSON.stringify(data, null, 2)}`;
       }
       dxSelected.length = 0; (s.dx || []).forEach(x => dxSelected.push(x)); renderDxChips();
       if (typeof ekgPhotoDataUrls !== 'undefined') { ekgPhotoDataUrls = (s.ekgPhotos || []).slice(); if (typeof renderEkgPreview === 'function') renderEkgPreview(); }
+      if (typeof bottlePhotoDataUrls !== 'undefined') { bottlePhotoDataUrls = (s.bottlePhotos || []).slice(); if (typeof renderBottlePreview === 'function') renderBottlePreview(); }
       const setOut = (id, o) => { const el = $(id); if (el && o) { el.textContent = o.text; el.classList.toggle('polished', !!o.polished); } };
       if (s.outputs) {
         setOut('narrativeOut', s.outputs.narrative); setOut('templateOut', s.outputs.template);
@@ -6833,6 +6857,7 @@ ${JSON.stringify(data, null, 2)}`;
     const st = clone.state;
     if (st) {
       if (Array.isArray(st.ekgPhotos)) { st.ekgPhotoCount = st.ekgPhotos.length; delete st.ekgPhotos; }
+      if (Array.isArray(st.bottlePhotos)) { st.bottlePhotoCount = st.bottlePhotos.length; delete st.bottlePhotos; }
       if (Array.isArray(st.flight)) {
         st.flight.forEach(e => { if (e && e.rhythmPhoto) { e.rhythmPhotoStored = true; delete e.rhythmPhoto; } });
       }
@@ -8075,13 +8100,24 @@ ${transcript}`;
     }
 
     // Home Medications (PTA) — name, dose, and what it's used for
-    if (Array.isArray(d.homeMeds) && d.homeMeds.length) {
+    const hasBottlePhotos = (typeof bottlePhotoDataUrls !== 'undefined') && bottlePhotoDataUrls && bottlePhotoDataUrls.length;
+    if ((Array.isArray(d.homeMeds) && d.homeMeds.length) || hasBottlePhotos) {
       html += '<h2>Home Medications (PTA)</h2>';
-      html += '<table><thead><tr><th>Medication</th><th>Dose / Frequency</th><th>Used for</th></tr></thead><tbody>';
-      d.homeMeds.forEach(m => {
-        html += `<tr><td>${escapeHtml(m.name || '')}</td><td>${escapeHtml(m.dose || '')}</td><td>${escapeHtml(m.use || '')}</td></tr>`;
-      });
-      html += '</tbody></table>';
+      if (Array.isArray(d.homeMeds) && d.homeMeds.length) {
+        html += '<table><thead><tr><th>Medication</th><th>Dose / Frequency</th><th>Used for</th></tr></thead><tbody>';
+        d.homeMeds.forEach(m => {
+          html += `<tr><td>${escapeHtml(m.name || '')}</td><td>${escapeHtml(m.dose || '')}</td><td>${escapeHtml(m.use || '')}</td></tr>`;
+        });
+        html += '</tbody></table>';
+      }
+      if (hasBottlePhotos) {
+        html += '<p><b>Medication bottle labels (verification photos):</b></p>';
+        html += '<div class="license-extras">';
+        bottlePhotoDataUrls.forEach((url, i) => {
+          html += `<div class="patient-photo"><img src="${url}" alt="Medication bottle ${i + 1}"><div class="photo-caption">Medication bottle label${bottlePhotoDataUrls.length > 1 ? ' #' + (i + 1) : ''}</div></div>`;
+        });
+        html += '</div>';
+      }
     }
 
     // Medications + drips — each subsection as its own paragraph
