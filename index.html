@@ -594,6 +594,9 @@
     animation: ekgCritFlash 0.9s ease-in-out infinite;
   }
   .ekg-critical-banner.show { display: block; }
+  /* EKG interpretation box — readable + expandable */
+  .ekg-interp { min-height: 150px; font-size: 14px; line-height: 1.55; }
+  .ekg-interp.ekg-expanded { height: 72vh !important; font-size: 15px; }
   .ai-tool-block {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -1452,8 +1455,11 @@
           </div>
 
           <div id="ekgCriticalBanner" class="ekg-critical-banner"></div>
-          <label style="margin-top:10px">EKG Interpretation / Diagnosis</label>
-          <textarea id="ekgInterp" oninput="updateEkgCritical()" placeholder="Rate: 88 bpm; Rhythm: normal sinus; Axis: normal; Intervals: PR 160 ms, QRS 90 ms, QTc 430 ms; ST/T: ST elevation in II, III, aVF with reciprocal depression in I, aVL; Interpretation: acute inferior STEMI"></textarea>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:10px">
+            <label style="margin:0">EKG Interpretation / Diagnosis</label>
+            <button type="button" class="calc-btn" style="width:auto;padding:3px 10px;font-size:12px" onclick="toggleEkgExpand(this)">⤢ Expand</button>
+          </div>
+          <textarea id="ekgInterp" class="ekg-interp" oninput="updateEkgCritical()" placeholder="Rate: 88 bpm; Rhythm: normal sinus; Axis: normal; Intervals: PR 160 ms, QRS 90 ms, QTc 430 ms; ST/T: ST elevation in II, III, aVF with reciprocal depression in I, aVL; Interpretation: acute inferior STEMI"></textarea>
           <button type="button" class="clear-btn" onclick="$('ekgInterp').value='';updateEkgCritical()" style="width:100%;margin-top:4px">Clear interpretation</button>
         </div>
       </details>
@@ -2822,7 +2828,22 @@ Do not add other disclaimers. Return plain text only, no markdown.`;
     const first = String(text || '').split('\n').map(s => s.trim()).filter(Boolean)[0];
     return first || '';
   }
+  // Grow the EKG interpretation box to fit its full text so the flight team can read it all.
+  function autoGrowEkg(){
+    const ta = $('ekgInterp'); if (!ta) return;
+    if (ta.classList.contains('ekg-expanded')) return; // manual large mode — don't fight it
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(Math.max(ta.scrollHeight + 4, 150), 1200) + 'px';
+  }
+  function toggleEkgExpand(btn){
+    const ta = $('ekgInterp'); if (!ta) return;
+    const on = ta.classList.toggle('ekg-expanded');
+    if (btn) btn.textContent = on ? '⤡ Collapse' : '⤢ Expand';
+    if (on) { ta.style.height = ''; ta.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    else { autoGrowEkg(); }
+  }
   function updateEkgCritical(){
+    autoGrowEkg();
     const banner = $('ekgCriticalBanner'); if (!banner) return;
     const txt = (typeof val === 'function') ? val('ekgInterp') : ($('ekgInterp') ? $('ekgInterp').value : '');
     if (txt && isLifeThreateningEkg(txt)) {
@@ -7264,7 +7285,7 @@ ${JSON.stringify(data, null, 2)}`;
     checkAllergyConflicts();
   }
   // Defer until the whole script has finished initializing the form
-  setTimeout(() => { if (typeof buildHomeMedDatalist === 'function') buildHomeMedDatalist(); if (typeof renderFlightEntries === 'function') renderFlightEntries(); if (typeof refreshTestBanner === 'function') refreshTestBanner(); initSaveSystem(); if (typeof checkHandoff === 'function') checkHandoff(); }, 0);
+  setTimeout(() => { if (typeof buildHomeMedDatalist === 'function') buildHomeMedDatalist(); if (typeof renderFlightEntries === 'function') renderFlightEntries(); if (typeof refreshTestBanner === 'function') refreshTestBanner(); initSaveSystem(); if (typeof checkHandoff === 'function') checkHandoff(); if (typeof updateEkgCritical === 'function') updateEkgCritical(); }, 0);
 
   // ====== Hospital address auto-fill ======
   const HOSPITAL_ADDRESSES = {
