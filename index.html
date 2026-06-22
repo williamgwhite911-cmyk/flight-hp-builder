@@ -7909,11 +7909,11 @@ ${transcript}`;
     const dobAge = [p.dob, ageSex && `(${ageSex})`].filter(Boolean).join(' ');
 
     let html = '' +
-      '<div style="text-align:center;background:#0c4a6e;color:#fff;padding:12px 10px;border-radius:6px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact">' +
-        '<div style="font-size:22pt;font-weight:800;letter-spacing:3px;line-height:1.05">TRAUMA STAR</div>' +
-        '<div style="font-size:12.5pt;font-weight:700;letter-spacing:1px;margin-top:1px">MONROE COUNTY FIRE RESCUE</div>' +
-        (d.statFlight ? `<div style="display:inline-block;margin-top:6px;padding:2px 12px;background:#fff;color:#0c4a6e;border-radius:12px;font-size:12pt;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact">${escapeHtml(d.statFlight)}</div>` : '') +
-        '<div style="font-size:10.5pt;margin-top:6px;letter-spacing:0.5px;opacity:0.95">CRITICAL CARE FLIGHT — PATIENT CARE / H&amp;P REPORT</div>' +
+      '<div style="text-align:center;background:#fff;border:2.5px solid #0c4a6e;padding:12px 10px;border-radius:6px;margin-bottom:10px">' +
+        '<div style="font-size:22pt;font-weight:800;letter-spacing:3px;line-height:1.05;color:#0c4a6e">TRAUMA STAR</div>' +
+        '<div style="font-size:12.5pt;font-weight:700;letter-spacing:1px;margin-top:1px;color:#0c4a6e">MONROE COUNTY FIRE RESCUE</div>' +
+        (d.statFlight ? `<div style="display:inline-block;margin-top:6px;padding:2px 14px;border:2px solid #dc2626;border-radius:12px;font-size:13pt;font-weight:800;color:#dc2626">${escapeHtml(d.statFlight)}</div>` : '') +
+        '<div style="font-size:10.5pt;margin-top:6px;letter-spacing:0.5px;color:#334155">CRITICAL CARE FLIGHT — PATIENT CARE / H&amp;P REPORT</div>' +
       '</div>';
 
     // Flight info block
