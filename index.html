@@ -2763,8 +2763,10 @@
   // Shared detailed EKG/rhythm-strip interpretation prompt — used by the Cardiac/EKG
   // section AND by per-entry rhythm-strip interpretation in the in-flight timeline,
   // so both get the same depth (BBB, P-wave/QRS morphology, AV blocks, transport plan).
-  const EKG_INTERP_PROMPT = `You are a critical-care flight clinician interpreting a 12-lead EKG and/or rhythm strip photo for a transport chart. Read ONLY what is visible in the image(s); do not invent values or findings you cannot see. Be systematic and specific. Provide the interpretation in plain text using these labeled lines (omit any line you genuinely cannot determine from the image):
-Rate: (atrial and ventricular rate in bpm; note if they differ, e.g., in AV dissociation)
+  const EKG_INTERP_PROMPT = `You are a critical-care flight clinician interpreting a 12-lead EKG and/or rhythm strip photo for a transport chart. Read ONLY what is visible in the image(s); do not invent values or findings you cannot see. Be systematic and specific. Provide the interpretation in plain text using these labeled lines, IN THIS EXACT ORDER (omit any line you genuinely cannot determine from the image):
+Interpretation: (LEAD WITH THIS — the overall diagnostic impression / most likely diagnosis — e.g., "acute inferior STEMI", "complete heart block with junctional escape", "atrial fibrillation with RVR and RBBB", "new LBBB")
+Rate: (heart rate in bpm — give the ventricular rate; also give the atrial rate and note if they differ, e.g., in AV dissociation)
+Ectopy: (PVCs, PACs, couplets/runs, pacing spikes, electrical alternans, low voltage, artifact, or "none" if none seen)
 Rhythm: (e.g., normal sinus, sinus tachy/brady, atrial fibrillation, atrial flutter, junctional, paced, etc.)
 P wave: (presence/absence; morphology — peaked/P-pulmonale, broad-notched/P-mitrale, biphasic P waves in V1 and the significance, inverted/retrograde P waves; relationship of P to QRS)
 PR interval: (value in ms; state whether normal, short, prolonged, or progressively lengthening)
@@ -2772,8 +2774,6 @@ QRS: (duration in ms; morphology — narrow vs wide; if wide, specify the bundle
 Axis: (normal / left axis deviation / right axis deviation / extreme — if determinable)
 AV block / conduction: (explicitly classify any heart block — first-degree (PR > 200 ms); second-degree Mobitz I/Wenckebach (progressive PR lengthening then a dropped beat); second-degree Mobitz II (constant PR with intermittent dropped QRS); high-grade/2:1 block; third-degree/complete heart block with AV dissociation; also note any bundle/fascicular block contributing to conduction disease)
 ST/T changes: (ST elevation or depression with the SPECIFIC leads and the territory; T-wave inversions/hyperacute T waves; note that LBBB or paced rhythm can obscure ST analysis and mention Sgarbossa criteria if relevant)
-Ectopy/other: (PVCs, PACs, pacing spikes, electrical alternans, low voltage, artifact, etc.)
-Interpretation: (the overall diagnostic impression / most likely diagnosis — e.g., "acute inferior STEMI", "complete heart block with junctional escape", "atrial fibrillation with RVR and RBBB", "new LBBB")
 Transport action plan: (concise, prioritized recommendations appropriate for a critical-care flight crew for THIS rhythm/finding — e.g., for symptomatic bradycardia/high-grade or complete heart block: atropine, transcutaneous pacing pads ready/active with sedation, chronotropic infusion such as epinephrine or dopamine, treat reversible causes; for STEMI: activate cath lab/notify receiving, ASA, nitro/heparin per protocol and contraindications, defib pads on; for unstable tachydysrhythmia: synchronized cardioversion vs rate/rhythm control; for wide-complex tachycardia of uncertain origin: treat as VT; always include continuous monitoring, defib/pacer pads, IV access, and what to anticipate en route. End this section with: "Confirm with medical control / receiving physician and follow protocol; clinical judgment overrides.")
 Do not add other disclaimers. Return plain text only, no markdown.`;
 
