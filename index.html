@@ -911,6 +911,8 @@
   <span id="autosaveStatus" class="autosave-status"></span>
 </div>
 
+<div id="allergyAlert" style="display:none;margin:8px 0;padding:10px 14px;border:2px solid #dc2626;background:#fef2f2;color:#991b1b;border-radius:10px;font-size:13px;font-weight:600"></div>
+
 <div class="layout">
   <div class="form active">
 
@@ -1581,6 +1583,26 @@
               <button type="button" class="calc-btn" onclick="pickPhoto('ocrIvFile','library')">🖼️ Choose from Library</button>
             </div>
             <div id="ocrIvStatus" class="hint"></div>
+          </div>
+        </div>
+      </details>
+    </fieldset>
+
+    <fieldset>
+      <details>
+        <summary>Home Medications (PTA)</summary>
+        <div class="fieldset-body">
+          <div class="hint">The patient's pre-existing home medications. Pick from the list (generic or brand) or type your own; the dose suggestions and a short "used for" summary auto-fill. These are reconciled against allergies — any conflict shows a red alert at the top.</div>
+          <div id="homeMedRows"></div>
+          <button type="button" class="calc-btn" style="width:auto;margin-top:6px" onclick="addHomeMedRow()">➕ Add home medication</button>
+          <div class="ocr-block" id="ocrBlockHomeMeds" style="display:none;margin-top:10px">
+            <label class="ocr-label" for="ocrHomeMedsFile">📷 Home-med list photo (pilot) — cover patient identifiers first</label>
+            <input type="file" id="ocrHomeMedsFile" accept="image/*" multiple onchange="handleHomeMedsPhoto(event)" style="display:none">
+            <div class="photo-src-btns">
+              <button type="button" class="calc-btn" onclick="pickPhoto('ocrHomeMedsFile','camera')">📷 Take Photo</button>
+              <button type="button" class="calc-btn" onclick="pickPhoto('ocrHomeMedsFile','library')">🖼️ Choose from Library</button>
+            </div>
+            <div id="ocrHomeMedsStatus" class="hint"></div>
           </div>
         </div>
       </details>
@@ -2442,6 +2464,8 @@
   <option value="Wishard / Eskenazi EMS">
   <option value="Other / Custom (type below)">
 </datalist>
+
+<datalist id="homeMedList"></datalist>
 
 <!-- Settings Modal -->
 <div class="modal-backdrop" id="settingsModal" onclick="if(event.target===this)closeSettings()">
@@ -3869,6 +3893,8 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
                 cardiac: val('aCardiac'), lungs: val('aLungs'), abd: val('aAbd'),
                 ext: val('aExt'), neuro: val('aNeuro') },
       ivs: gatherIVs(),
+      homeMeds: gatherHomeMeds(),
+      allergyConflicts: computeAllergyConflicts(),
       meds: val('medsPTA'),
       drips: val('drips'),
       pushMeds: gatherPushMeds(),
@@ -3989,6 +4015,8 @@ CRITICAL INSTRUCTIONS:
 - If "vitalsTrend" has entries, render them in the template under a "Vital Signs Trend (in-flight):" line as a compact list ordered by time (e.g., "08:42 BP 138/82, HR 92, RR 18, SpO2 96%, EtCO2 35; 08:55 BP 122/74, HR 88, RR 16, SpO2 98%, EtCO2 36"). In the narrative, reference any clinically significant trend (e.g., "BP normalized after fluid resuscitation between 08:42 and 09:10").
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
 - If "ekg" is provided, include the EKG interpretation/diagnosis under the diagnostic studies in both the narrative and the template (e.g., "EKG: acute inferior STEMI"). Use only what the "ekg" text states; do not infer additional findings.
+- If "homeMeds" has entries, include a "Home Medications:" section in the template listing each medication with its dose (e.g., "Lisinopril 10 mg daily; Metformin 1000 mg BID"). Reference clinically relevant home meds (anticoagulants, antiplatelets, beta-blockers, insulin, immunosuppressants) in the narrative where pertinent. Do not invent home meds, doses, or uses not provided.
+- If "allergyConflicts" is a non-empty array, you MUST add a clearly worded SAFETY ALERT line in BOTH outputs, e.g., "⚠ ALLERGY ALERT: [medName] was administered/listed despite a documented allergy to [allergen] ([reaction])." List every conflict. Do not soften or omit it. If "allergyConflicts" is empty, do not mention any conflict.
 - Use professional EMS/clinical language.
 - Do not use em dashes.
 - Return your response as a single JSON object with THREE keys:
@@ -4008,7 +4036,7 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
     // NOTE: licenseOcrBlock / faceSheetOcrBlock are intentionally NOT gated here —
     // their auto-fill buttons are revealed by renderLicensePreview / renderFaceSheetPreview
     // whenever a photo is present, independent of this IV/vent pilot toggle.
-    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockAbg', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'ocrBlockVitals'].forEach(id => {
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockAbg', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHomeMeds', 'ocrBlockHistory', 'ocrBlockVitals'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = on ? 'block' : 'none';
     });
@@ -4918,6 +4946,257 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
     })).filter(r => r.name || r.value);
   }
 
+  // ====== Home Medications (PTA) ======
+  // Curated common outpatient meds: name, brand alias(es), a ≤2-line "used for" summary, and typical doses.
+  const HOME_MEDS = [
+    { name:'Lisinopril', brand:'Prinivil/Zestril', use:'ACE inhibitor for high blood pressure and heart failure; also protects kidneys in diabetes. Can cause cough/angioedema and raise potassium.', doses:['5 mg daily','10 mg daily','20 mg daily','40 mg daily'] },
+    { name:'Losartan', brand:'Cozaar', use:'ARB for high blood pressure and kidney protection in diabetes. Alternative when ACE inhibitors cause cough.', doses:['25 mg daily','50 mg daily','100 mg daily'] },
+    { name:'Valsartan', brand:'Diovan', use:'ARB for high blood pressure and heart failure.', doses:['40 mg BID','80 mg daily','160 mg daily','320 mg daily'] },
+    { name:'Amlodipine', brand:'Norvasc', use:'Calcium-channel blocker for high blood pressure and angina. Common side effect is leg/ankle edema.', doses:['2.5 mg daily','5 mg daily','10 mg daily'] },
+    { name:'Metoprolol', brand:'Lopressor/Toprol XL', use:'Beta-blocker for high blood pressure, angina, heart failure, and rate control in arrhythmias.', doses:['25 mg BID','50 mg BID','100 mg BID','25 mg daily (XL)','50 mg daily (XL)','100 mg daily (XL)'] },
+    { name:'Carvedilol', brand:'Coreg', use:'Beta-blocker used in heart failure and high blood pressure; lowers heart rate and blood pressure.', doses:['3.125 mg BID','6.25 mg BID','12.5 mg BID','25 mg BID'] },
+    { name:'Atenolol', brand:'Tenormin', use:'Beta-blocker for high blood pressure and rate control.', doses:['25 mg daily','50 mg daily','100 mg daily'] },
+    { name:'Diltiazem', brand:'Cardizem', use:'Calcium-channel blocker for rate control in atrial fibrillation and for high blood pressure/angina.', doses:['120 mg daily','180 mg daily','240 mg daily','300 mg daily'] },
+    { name:'Hydrochlorothiazide', brand:'HCTZ/Microzide', use:'Thiazide diuretic for high blood pressure; mild fluid removal. Can lower potassium/sodium.', doses:['12.5 mg daily','25 mg daily','50 mg daily'] },
+    { name:'Furosemide', brand:'Lasix', use:'Loop diuretic for fluid overload in heart failure, kidney, or liver disease. Lowers potassium.', doses:['20 mg daily','40 mg daily','80 mg daily','40 mg BID'] },
+    { name:'Spironolactone', brand:'Aldactone', use:'Potassium-sparing diuretic for heart failure, resistant hypertension, and ascites. Can raise potassium.', doses:['12.5 mg daily','25 mg daily','50 mg daily'] },
+    { name:'Hydralazine', brand:'Apresoline', use:'Direct vasodilator for high blood pressure and heart failure.', doses:['25 mg TID','50 mg TID','100 mg TID'] },
+    { name:'Clonidine', brand:'Catapres', use:'Central alpha-agonist for high blood pressure; abrupt stop can cause rebound hypertension.', doses:['0.1 mg BID','0.2 mg BID','0.1 mg patch weekly'] },
+    { name:'Isosorbide mononitrate', brand:'Imdur', use:'Long-acting nitrate to prevent angina (chest pain) by dilating coronary vessels.', doses:['30 mg daily','60 mg daily','120 mg daily'] },
+    { name:'Digoxin', brand:'Lanoxin', use:'Used for heart failure and rate control in atrial fibrillation. Narrow therapeutic window — watch for toxicity.', doses:['0.125 mg daily','0.25 mg daily'] },
+    { name:'Warfarin', brand:'Coumadin', use:'Vitamin-K-antagonist anticoagulant (blood thinner) for clots, DVT/PE, and atrial fibrillation. Requires INR monitoring.', doses:['1 mg daily','2.5 mg daily','5 mg daily','7.5 mg daily'] },
+    { name:'Apixaban', brand:'Eliquis', use:'Direct oral anticoagulant (blood thinner) for atrial fibrillation and DVT/PE.', doses:['2.5 mg BID','5 mg BID'] },
+    { name:'Rivaroxaban', brand:'Xarelto', use:'Direct oral anticoagulant (blood thinner) for atrial fibrillation and DVT/PE.', doses:['10 mg daily','15 mg daily','20 mg daily'] },
+    { name:'Dabigatran', brand:'Pradaxa', use:'Direct oral anticoagulant (blood thinner) for atrial fibrillation and DVT/PE.', doses:['75 mg BID','150 mg BID'] },
+    { name:'Clopidogrel', brand:'Plavix', use:'Antiplatelet to prevent clots after stents, heart attack, or stroke.', doses:['75 mg daily'] },
+    { name:'Ticagrelor', brand:'Brilinta', use:'Antiplatelet after acute coronary syndrome / stent placement.', doses:['90 mg BID','60 mg BID'] },
+    { name:'Aspirin', brand:'ASA/Ecotrin', use:'Antiplatelet for heart attack/stroke prevention; also an NSAID pain reliever.', doses:['81 mg daily','325 mg daily'] },
+    { name:'Enoxaparin', brand:'Lovenox', use:'Low-molecular-weight heparin (injectable blood thinner) for clots and prophylaxis.', doses:['40 mg SC daily','1 mg/kg SC BID','30 mg SC BID'] },
+    { name:'Atorvastatin', brand:'Lipitor', use:'Statin that lowers cholesterol to reduce heart attack and stroke risk.', doses:['10 mg daily','20 mg daily','40 mg daily','80 mg daily'] },
+    { name:'Simvastatin', brand:'Zocor', use:'Statin that lowers cholesterol to reduce cardiovascular risk.', doses:['10 mg daily','20 mg daily','40 mg daily'] },
+    { name:'Rosuvastatin', brand:'Crestor', use:'Statin that lowers cholesterol to reduce cardiovascular risk.', doses:['5 mg daily','10 mg daily','20 mg daily','40 mg daily'] },
+    { name:'Pravastatin', brand:'Pravachol', use:'Statin that lowers cholesterol.', doses:['20 mg daily','40 mg daily','80 mg daily'] },
+    { name:'Ezetimibe', brand:'Zetia', use:'Lowers cholesterol by blocking intestinal absorption; often added to a statin.', doses:['10 mg daily'] },
+    { name:'Metformin', brand:'Glucophage', use:'First-line oral medication for type 2 diabetes; lowers blood sugar. Hold around contrast/illness (lactic acidosis risk).', doses:['500 mg daily','500 mg BID','850 mg BID','1000 mg BID'] },
+    { name:'Insulin glargine', brand:'Lantus/Basaglar/Toujeo', use:'Long-acting basal insulin for diabetes; provides background glucose control.', doses:['10 units SC daily','20 units SC daily','units per sliding scale'] },
+    { name:'Insulin aspart', brand:'NovoLog', use:'Rapid-acting mealtime insulin for diabetes.', doses:['per carb ratio','sliding scale with meals'] },
+    { name:'Insulin lispro', brand:'Humalog', use:'Rapid-acting mealtime insulin for diabetes.', doses:['per carb ratio','sliding scale with meals'] },
+    { name:'Glipizide', brand:'Glucotrol', use:'Sulfonylurea that increases insulin release in type 2 diabetes; can cause hypoglycemia.', doses:['5 mg daily','10 mg daily','10 mg BID'] },
+    { name:'Glimepiride', brand:'Amaryl', use:'Sulfonylurea for type 2 diabetes; can cause hypoglycemia.', doses:['1 mg daily','2 mg daily','4 mg daily'] },
+    { name:'Empagliflozin', brand:'Jardiance', use:'SGLT2 inhibitor for type 2 diabetes and heart failure; lowers sugar via the urine.', doses:['10 mg daily','25 mg daily'] },
+    { name:'Sitagliptin', brand:'Januvia', use:'DPP-4 inhibitor for type 2 diabetes.', doses:['25 mg daily','50 mg daily','100 mg daily'] },
+    { name:'Semaglutide', brand:'Ozempic/Wegovy', use:'GLP-1 agonist for type 2 diabetes and weight management; injectable weekly.', doses:['0.25 mg SC weekly','0.5 mg SC weekly','1 mg SC weekly'] },
+    { name:'Levothyroxine', brand:'Synthroid', use:'Thyroid hormone replacement for hypothyroidism.', doses:['25 mcg daily','50 mcg daily','75 mcg daily','100 mcg daily','125 mcg daily'] },
+    { name:'Albuterol', brand:'Ventolin/ProAir', use:'Short-acting bronchodilator (rescue inhaler) for asthma/COPD wheezing and shortness of breath.', doses:['2 puffs q4-6h PRN','2.5 mg neb PRN'] },
+    { name:'Fluticasone-salmeterol', brand:'Advair', use:'Inhaled steroid + long-acting bronchodilator for maintenance control of asthma/COPD.', doses:['1 puff BID','250/50 BID','500/50 BID'] },
+    { name:'Tiotropium', brand:'Spiriva', use:'Long-acting inhaled anticholinergic for COPD maintenance.', doses:['1 inhalation daily'] },
+    { name:'Montelukast', brand:'Singulair', use:'Leukotriene blocker for asthma and allergic rhinitis.', doses:['10 mg daily'] },
+    { name:'Prednisone', brand:'Deltasone', use:'Oral corticosteroid for inflammation, COPD/asthma flares, and autoimmune disease. Do not stop abruptly if chronic.', doses:['5 mg daily','10 mg daily','20 mg daily','40 mg daily','taper'] },
+    { name:'Omeprazole', brand:'Prilosec', use:'Proton-pump inhibitor for acid reflux (GERD) and ulcers.', doses:['20 mg daily','40 mg daily'] },
+    { name:'Pantoprazole', brand:'Protonix', use:'Proton-pump inhibitor for reflux/GERD and ulcers.', doses:['20 mg daily','40 mg daily'] },
+    { name:'Famotidine', brand:'Pepcid', use:'H2 blocker that reduces stomach acid for reflux and ulcers.', doses:['20 mg daily','20 mg BID','40 mg daily'] },
+    { name:'Ondansetron', brand:'Zofran', use:'Anti-nausea/vomiting medication.', doses:['4 mg q8h PRN','8 mg q8h PRN'] },
+    { name:'Docusate', brand:'Colace', use:'Stool softener to prevent constipation.', doses:['100 mg BID','250 mg daily'] },
+    { name:'Polyethylene glycol', brand:'Miralax', use:'Osmotic laxative for constipation.', doses:['17 g daily'] },
+    { name:'Sertraline', brand:'Zoloft', use:'SSRI antidepressant for depression and anxiety.', doses:['25 mg daily','50 mg daily','100 mg daily','200 mg daily'] },
+    { name:'Escitalopram', brand:'Lexapro', use:'SSRI antidepressant for depression and anxiety.', doses:['5 mg daily','10 mg daily','20 mg daily'] },
+    { name:'Fluoxetine', brand:'Prozac', use:'SSRI antidepressant for depression, anxiety, and OCD.', doses:['10 mg daily','20 mg daily','40 mg daily'] },
+    { name:'Citalopram', brand:'Celexa', use:'SSRI antidepressant; can prolong the QT interval at higher doses.', doses:['10 mg daily','20 mg daily','40 mg daily'] },
+    { name:'Duloxetine', brand:'Cymbalta', use:'SNRI for depression, anxiety, and nerve/chronic pain.', doses:['30 mg daily','60 mg daily'] },
+    { name:'Venlafaxine', brand:'Effexor', use:'SNRI for depression and anxiety; can raise blood pressure.', doses:['37.5 mg daily','75 mg daily','150 mg daily'] },
+    { name:'Bupropion', brand:'Wellbutrin', use:'Atypical antidepressant; also used for smoking cessation. Lowers seizure threshold.', doses:['150 mg daily','150 mg BID','300 mg XL daily'] },
+    { name:'Trazodone', brand:'Desyrel', use:'Used for insomnia and as an antidepressant.', doses:['25 mg qHS','50 mg qHS','100 mg qHS'] },
+    { name:'Mirtazapine', brand:'Remeron', use:'Antidepressant that also helps sleep and appetite.', doses:['7.5 mg qHS','15 mg qHS','30 mg qHS'] },
+    { name:'Quetiapine', brand:'Seroquel', use:'Antipsychotic for bipolar disorder, schizophrenia; low doses used for sleep. Can prolong QT.', doses:['25 mg qHS','50 mg BID','100 mg BID','300 mg daily'] },
+    { name:'Risperidone', brand:'Risperdal', use:'Antipsychotic for schizophrenia and bipolar disorder.', doses:['0.5 mg BID','1 mg BID','2 mg daily'] },
+    { name:'Aripiprazole', brand:'Abilify', use:'Antipsychotic for schizophrenia, bipolar disorder, and adjunct in depression.', doses:['2 mg daily','5 mg daily','10 mg daily','15 mg daily'] },
+    { name:'Olanzapine', brand:'Zyprexa', use:'Antipsychotic for schizophrenia and bipolar disorder.', doses:['5 mg daily','10 mg daily','20 mg daily'] },
+    { name:'Lithium', brand:'Lithobid', use:'Mood stabilizer for bipolar disorder. Narrow therapeutic window — watch toxicity, especially with dehydration/NSAIDs.', doses:['300 mg BID','300 mg TID','600 mg BID'] },
+    { name:'Alprazolam', brand:'Xanax', use:'Short-acting benzodiazepine for anxiety/panic. Sedating; risk with opioids.', doses:['0.25 mg TID PRN','0.5 mg TID PRN','1 mg BID'] },
+    { name:'Lorazepam', brand:'Ativan', use:'Benzodiazepine for anxiety, seizures, and agitation. Sedating.', doses:['0.5 mg BID PRN','1 mg BID PRN','2 mg PRN'] },
+    { name:'Clonazepam', brand:'Klonopin', use:'Long-acting benzodiazepine for anxiety and seizures.', doses:['0.5 mg BID','1 mg BID','2 mg daily'] },
+    { name:'Zolpidem', brand:'Ambien', use:'Sedative-hypnotic for insomnia.', doses:['5 mg qHS','10 mg qHS'] },
+    { name:'Gabapentin', brand:'Neurontin', use:'For nerve pain and as an add-on seizure medication.', doses:['100 mg TID','300 mg TID','600 mg TID','800 mg TID'] },
+    { name:'Pregabalin', brand:'Lyrica', use:'For nerve pain, fibromyalgia, and seizures.', doses:['75 mg BID','150 mg BID','300 mg BID'] },
+    { name:'Levetiracetam', brand:'Keppra', use:'Anti-seizure medication.', doses:['500 mg BID','750 mg BID','1000 mg BID','1500 mg BID'] },
+    { name:'Lamotrigine', brand:'Lamictal', use:'Anti-seizure medication and mood stabilizer. Watch for serious rash (SJS).', doses:['25 mg daily','100 mg daily','200 mg daily'] },
+    { name:'Valproic acid', brand:'Depakote', use:'Anti-seizure medication and mood stabilizer; also for migraine prevention.', doses:['250 mg BID','500 mg BID','500 mg TID'] },
+    { name:'Phenytoin', brand:'Dilantin', use:'Anti-seizure medication; narrow therapeutic window.', doses:['100 mg TID','300 mg daily'] },
+    { name:'Topiramate', brand:'Topamax', use:'Anti-seizure medication; also for migraine prevention.', doses:['25 mg daily','50 mg BID','100 mg BID'] },
+    { name:'Levetiracetam', brand:'Keppra', use:'Anti-seizure medication, well tolerated.', doses:['500 mg BID','1000 mg BID'] },
+    { name:'Acetaminophen', brand:'Tylenol', use:'Non-opioid pain reliever and fever reducer. Watch total daily dose (liver).', doses:['500 mg q6h PRN','650 mg q6h PRN','1000 mg q8h PRN'] },
+    { name:'Ibuprofen', brand:'Motrin/Advil', use:'NSAID for pain, fever, and inflammation. GI/renal/bleeding risk.', doses:['200 mg q6h PRN','400 mg q6h PRN','600 mg TID','800 mg TID'] },
+    { name:'Naproxen', brand:'Aleve', use:'NSAID for pain and inflammation.', doses:['250 mg BID','500 mg BID'] },
+    { name:'Meloxicam', brand:'Mobic', use:'NSAID for arthritis and chronic pain.', doses:['7.5 mg daily','15 mg daily'] },
+    { name:'Tramadol', brand:'Ultram', use:'Weak opioid analgesic for moderate pain; lowers seizure threshold and serotonergic.', doses:['50 mg q6h PRN','100 mg q6h PRN'] },
+    { name:'Hydrocodone-acetaminophen', brand:'Norco/Vicodin', use:'Opioid + acetaminophen for moderate-to-severe pain. Sedating; respiratory depression risk.', doses:['5/325 q6h PRN','7.5/325 q6h PRN','10/325 q6h PRN'] },
+    { name:'Oxycodone', brand:'Roxicodone/OxyContin', use:'Opioid for moderate-to-severe pain. Respiratory depression risk.', doses:['5 mg q6h PRN','10 mg q6h PRN','OxyContin 10 mg BID'] },
+    { name:'Cyclobenzaprine', brand:'Flexeril', use:'Muscle relaxant for muscle spasm; sedating.', doses:['5 mg TID PRN','10 mg TID PRN'] },
+    { name:'Allopurinol', brand:'Zyloprim', use:'Lowers uric acid to prevent gout attacks.', doses:['100 mg daily','300 mg daily'] },
+    { name:'Tamsulosin', brand:'Flomax', use:'Alpha-blocker that relaxes the prostate/bladder for urinary symptoms (BPH). Can cause orthostatic hypotension.', doses:['0.4 mg daily','0.8 mg daily'] },
+    { name:'Finasteride', brand:'Proscar/Propecia', use:'Shrinks the prostate for BPH; also for hair loss.', doses:['5 mg daily','1 mg daily'] },
+    { name:'Amoxicillin', brand:'Amoxil', use:'Penicillin-class antibiotic for common bacterial infections.', doses:['500 mg TID','875 mg BID'] },
+    { name:'Amoxicillin-clavulanate', brand:'Augmentin', use:'Penicillin-class antibiotic for sinus, ear, and respiratory infections.', doses:['500/125 TID','875/125 BID'] },
+    { name:'Azithromycin', brand:'Zithromax/Z-Pak', use:'Macrolide antibiotic for respiratory and other infections. Can prolong QT.', doses:['500 mg then 250 mg daily','250 mg daily'] },
+    { name:'Ciprofloxacin', brand:'Cipro', use:'Fluoroquinolone antibiotic for urinary and GI infections. Tendon/QT risk.', doses:['250 mg BID','500 mg BID'] },
+    { name:'Cephalexin', brand:'Keflex', use:'Cephalosporin antibiotic for skin and urinary infections.', doses:['250 mg QID','500 mg BID','500 mg QID'] },
+    { name:'Doxycycline', brand:'Vibramycin', use:'Tetracycline antibiotic for respiratory, skin, and tick-borne infections.', doses:['100 mg BID','100 mg daily'] },
+    { name:'Trimethoprim-sulfamethoxazole', brand:'Bactrim/Septra', use:'Sulfa antibiotic for urinary, skin (MRSA), and other infections.', doses:['1 DS tablet BID','1 SS tablet daily'] },
+    { name:'Nitrofurantoin', brand:'Macrobid', use:'Antibiotic for uncomplicated urinary tract infections.', doses:['100 mg BID'] },
+    { name:'Ferrous sulfate', brand:'Feosol', use:'Iron supplement for iron-deficiency anemia.', doses:['325 mg daily','325 mg BID'] },
+    { name:'Potassium chloride', brand:'Klor-Con', use:'Potassium supplement, often with diuretics.', doses:['10 mEq daily','20 mEq daily','40 mEq daily'] },
+    { name:'Vitamin D', brand:'Cholecalciferol', use:'Supplement for vitamin D deficiency and bone health.', doses:['1000 IU daily','2000 IU daily','50000 IU weekly'] },
+    { name:'Folic acid', brand:'Folate', use:'Vitamin supplement for anemia and in pregnancy.', doses:['1 mg daily'] },
+    { name:'Hydroxychloroquine', brand:'Plaquenil', use:'DMARD for lupus and rheumatoid arthritis.', doses:['200 mg daily','200 mg BID'] },
+    { name:'Methotrexate', brand:'Trexall', use:'Immunosuppressant/DMARD for rheumatoid arthritis and psoriasis; weekly dosing.', doses:['7.5 mg weekly','10 mg weekly','15 mg weekly'] },
+    { name:'Apixaban', brand:'Eliquis', use:'Direct oral anticoagulant (blood thinner).', doses:['2.5 mg BID','5 mg BID'] }
+  ];
+  function buildHomeMedDatalist(){
+    const dl = $('homeMedList'); if (!dl) return;
+    const opts = [];
+    HOME_MEDS.forEach(m => {
+      opts.push(m.name);
+      (m.brand || '').split('/').forEach(b => { b = b.trim(); if (b) opts.push(b + ' (' + m.name + ')'); });
+    });
+    // de-dup
+    const seen = {}, uniq = [];
+    opts.forEach(o => { const k = o.toLowerCase(); if (!seen[k]) { seen[k] = 1; uniq.push(o); } });
+    dl.innerHTML = uniq.sort().map(o => `<option value="${attrEsc(o)}">`).join('');
+  }
+  function lookupHomeMed(name){
+    const q = normMed(name).replace(/\(.*\)/g, '').trim();
+    if (!q) return null;
+    for (const m of HOME_MEDS) {
+      const n = normMed(m.name);
+      const brands = (m.brand || '').toLowerCase().split('/').map(s => normMed(s)).filter(Boolean);
+      if (n === q || brands.indexOf(q) >= 0) return m;
+    }
+    for (const m of HOME_MEDS) {
+      const n = normMed(m.name);
+      const brands = (m.brand || '').toLowerCase().split('/').map(s => normMed(s)).filter(Boolean);
+      if ((n.length >= 4 && q.indexOf(n) === 0) || brands.some(b => b.length >= 4 && q.indexOf(b) === 0)) return m;
+    }
+    return null;
+  }
+  const HOME_MED_MAX = 40;
+  function addHomeMedRow(data){
+    data = data || {};
+    const wrap = $('homeMedRows'); if (!wrap) return;
+    if (!data.name && wrap.querySelectorAll('.hm-row').length >= HOME_MED_MAX) { alert('Maximum ' + HOME_MED_MAX + ' home medications.'); return; }
+    const div = document.createElement('div');
+    div.className = 'hm-row abg-row';
+    div.innerHTML =
+      `<div class="abg-row-head"><span>Home med</span><button type="button" title="Remove">×</button></div>
+      <div class="row">
+        <div><label>Medication</label><input type="text" class="hm-name" list="homeMedList" value="${attrEsc(data.name)}" placeholder="e.g., Lisinopril (type or pick)" oninput="onHomeMedName(this)"></div>
+        <div><label>Dose / frequency</label><input type="text" class="hm-dose" value="${attrEsc(data.dose)}" placeholder="e.g., 10 mg daily"></div>
+      </div>
+      <div><label>Used for (auto-fills; editable)</label><textarea class="hm-use" rows="2" placeholder="What this medication treats…">${escapeHtml(data.use || '')}</textarea></div>`;
+    div.querySelector('.abg-row-head button').addEventListener('click', () => { div.remove(); checkAllergyConflicts(); });
+    wrap.appendChild(div);
+    if (data.name && !data.use) onHomeMedName(div.querySelector('.hm-name'));
+  }
+  function onHomeMedName(input){
+    const row = input.closest('.hm-row'); if (!row) return;
+    const m = lookupHomeMed(input.value);
+    const useEl = row.querySelector('.hm-use'), doseEl = row.querySelector('.hm-dose');
+    if (m) {
+      if (useEl && !useEl.value.trim()) useEl.value = m.use;
+      if (doseEl && m.doses && m.doses.length) {
+        let dl = row.querySelector('datalist');
+        if (!dl) { dl = document.createElement('datalist'); dl.id = 'hmdose_' + (input.getAttribute('data-dl') || (Date.now().toString(36) + Math.floor(Math.random() * 1e4))); input.setAttribute('data-dl', dl.id); row.appendChild(dl); }
+        dl.innerHTML = m.doses.map(d => `<option value="${attrEsc(d)}">`).join('');
+        doseEl.setAttribute('list', dl.id);
+        if (!doseEl.value) doseEl.placeholder = 'e.g., ' + m.doses[0];
+      }
+    }
+    checkAllergyConflicts();
+  }
+  function gatherHomeMeds(){
+    return Array.from(document.querySelectorAll('#homeMedRows .hm-row')).map(div => ({
+      name: (div.querySelector('.hm-name').value || '').trim(),
+      dose: (div.querySelector('.hm-dose').value || '').trim(),
+      use: (div.querySelector('.hm-use').value || '').trim(),
+    })).filter(m => m.name);
+  }
+
+  // ====== Medication ↔ allergy reconciliation ======
+  function normMed(s){ return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+  // Cross-reactivity groups: if an allergen matches any "allergen" keyword, any administered
+  // med matching a "drugs" keyword is flagged.
+  const ALLERGY_CROSS = [
+    { label: 'penicillin class', allergen: ['penicillin', 'amoxicillin', 'ampicillin', 'augmentin', 'pcn', 'piperacillin', 'nafcillin', 'dicloxacillin', 'beta lactam'], drugs: ['penicillin', 'amoxicillin', 'ampicillin', 'augmentin', 'piperacillin', 'tazobactam', 'zosyn', 'nafcillin', 'oxacillin', 'dicloxacillin', 'unasyn', 'sulbactam'] },
+    { label: 'cephalosporin', allergen: ['cephalosporin', 'cefepime', 'ceftriaxone', 'cefazolin', 'cephalexin', 'keflex', 'cefdinir', 'rocephin', 'ancef'], drugs: ['cefepime', 'ceftriaxone', 'cefazolin', 'cephalexin', 'keflex', 'cefdinir', 'cefuroxime', 'ceftazidime', 'rocephin', 'ancef', 'maxipime'] },
+    { label: 'sulfonamide', allergen: ['sulfa', 'sulfonamide', 'bactrim', 'septra', 'sulfamethoxazole'], drugs: ['sulfamethoxazole', 'bactrim', 'septra', 'sulfadiazine', 'sulfasalazine'] },
+    { label: 'NSAID / aspirin', allergen: ['nsaid', 'ibuprofen', 'naproxen', 'aspirin', 'asa', 'ketorolac', 'toradol', 'salicylate', 'meloxicam'], drugs: ['ibuprofen', 'naproxen', 'aspirin', 'ketorolac', 'toradol', 'indomethacin', 'diclofenac', 'meloxicam', 'celecoxib', 'asa'] },
+    { label: 'fluoroquinolone', allergen: ['fluoroquinolone', 'ciprofloxacin', 'levofloxacin', 'cipro', 'levaquin', 'moxifloxacin'], drugs: ['ciprofloxacin', 'levofloxacin', 'moxifloxacin', 'cipro', 'levaquin', 'avelox', 'floxacin'] },
+    { label: 'macrolide', allergen: ['macrolide', 'erythromycin', 'azithromycin', 'clarithromycin', 'zithromax'], drugs: ['erythromycin', 'azithromycin', 'clarithromycin', 'zithromax'] },
+    { label: 'heparin', allergen: ['heparin', 'hit'], drugs: ['heparin', 'enoxaparin', 'lovenox', 'dalteparin'] },
+    { label: 'ACE inhibitor', allergen: ['ace inhibitor', 'lisinopril', 'enalapril', 'ramipril', 'benazepril', 'captopril'], drugs: ['lisinopril', 'enalapril', 'enalaprilat', 'ramipril', 'benazepril', 'captopril'] },
+    { label: 'statin', allergen: ['statin'], drugs: ['atorvastatin', 'simvastatin', 'rosuvastatin', 'pravastatin', 'lovastatin', 'statin', 'lipitor', 'crestor', 'zocor'] },
+    { label: 'local anesthetic', allergen: ['lidocaine'], drugs: ['lidocaine', 'bupivacaine'] },
+    { label: 'iodinated contrast', allergen: ['iodinated contrast', 'iodine', 'contrast'], drugs: ['contrast', 'iohexol', 'iodixanol', 'omnipaque'] },
+    { label: 'succinylcholine', allergen: ['succinylcholine', 'sux', 'anectine'], drugs: ['succinylcholine', 'anectine'] },
+    { label: 'ondansetron', allergen: ['ondansetron', 'zofran'], drugs: ['ondansetron', 'zofran'] },
+  ];
+  // Build the list of meds that were GIVEN / are being given (not the patient's own home meds).
+  function collectAdministeredMeds(){
+    const out = [];
+    const add = (name, src) => { if (name && name.trim()) out.push({ name: name.trim(), src }); };
+    (typeof gatherPushMeds === 'function' ? gatherPushMeds() : []).forEach(m => add(m.name, 'IV push' + (m.time ? ' @ ' + m.time : '')));
+    [['medsPTA', 'meds given PTA'], ['drips', 'drip'], ['rsi', 'RSI agent'], ['sedation', 'sedation drip']].forEach(([id, label]) => {
+      const t = val(id); if (t) t.split(/[;\n]/).forEach(seg => { const s = seg.replace(/\d.*$/, '').trim() || seg.trim(); add(seg.trim(), label); });
+    });
+    if (typeof flightEntries !== 'undefined') {
+      flightEntries.forEach(e => {
+        (e.pushMeds || []).forEach(m => add(m.name, 'in-flight push' + (e.time ? ' @ ' + e.time : '')));
+        (e.drips || []).forEach(d => add(d.name, 'in-flight drip' + (e.time ? ' @ ' + e.time : '')));
+      });
+    }
+    return out;
+  }
+  function computeAllergyConflicts(){
+    const alg = (typeof gatherAllergies === 'function') ? gatherAllergies() : { status: 'has', items: [] };
+    if (!alg || alg.status === 'nkda' || alg.status === 'nka' || !Array.isArray(alg.items) || !alg.items.length) return [];
+    const meds = collectAdministeredMeds();
+    const conflicts = [];
+    const seen = {};
+    meds.forEach(med => {
+      const mn = normMed(med.name);
+      if (!mn) return;
+      alg.items.forEach(a => {
+        const an = normMed(a.allergen);
+        if (!an) return;
+        let hit = false, note = '';
+        // direct: a meaningful allergen token appears in the med name (or vice-versa)
+        const aTokens = an.split(' ').filter(w => w.length >= 4);
+        if (aTokens.some(t => mn.indexOf(t) >= 0)) hit = true;
+        if (!hit) {
+          ALLERGY_CROSS.forEach(c => {
+            if (c.allergen.some(k => an.indexOf(k) >= 0) && c.drugs.some(d => mn.indexOf(d) >= 0)) { hit = true; note = c.label + ' cross-reactivity'; }
+          });
+        }
+        if (hit) {
+          const key = mn + '|' + an + '|' + med.src;
+          if (!seen[key]) { seen[key] = 1; conflicts.push({ medName: med.name, src: med.src, allergen: a.allergen, reaction: a.reaction || '', note }); }
+        }
+      });
+    });
+    return conflicts;
+  }
+  function renderAllergyAlert(conflicts){
+    const box = $('allergyAlert'); if (!box) return;
+    if (!conflicts || !conflicts.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = 'block';
+    box.innerHTML = '⚠ ALLERGY CONFLICT — verify before administering:' +
+      '<ul style="margin:6px 0 0 18px">' +
+      conflicts.map(c => `<li><b>${escapeHtml(c.medName)}</b> (${escapeHtml(c.src)}) — documented allergy to <b>${escapeHtml(c.allergen)}</b>${c.reaction ? ' (' + escapeHtml(c.reaction) + ')' : ''}${c.note ? ' — ' + escapeHtml(c.note) : ''}</li>`).join('') +
+      '</ul>';
+  }
+  let allergyCheckTimer = null;
+  function checkAllergyConflicts(){ const c = computeAllergyConflicts(); renderAllergyAlert(c); return c; }
+  function scheduleAllergyCheck(){ clearTimeout(allergyCheckTimer); allergyCheckTimer = setTimeout(checkAllergyConflicts, 350); }
+
   // ====== IV Push Medications ======
   const PUSH_MED_GROUPS = {
     'Sedation / Induction': ['Etomidate', 'Ketamine', 'Midazolam (Versed)', 'Lorazepam (Ativan)', 'Diazepam (Valium)', 'Propofol (bolus)'],
@@ -5425,6 +5704,35 @@ CRITICAL: extract EVERY value present in the photo(s) — do not summarize, do n
     }
   }
 
+  // ====== Home-med list photo → structured Home Medications rows (pilot) ======
+  async function handleHomeMedsPhoto(event){
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    if (!confirmPhi('home medication list')) { event.target.value = ''; return; }
+    const status = $('ocrHomeMedsStatus');
+    const n = files.length;
+    if (status) { status.innerHTML = `<span class="spinner"></span> Extracting home medications from ${n} photo${n === 1 ? '' : 's'}…`; status.style.color = '#5b21b6'; }
+    const prompt = `Examine the photo(s) of a patient's home medication list / discharge med list / pharmacy printout. Extract ONLY the home medications across all images, de-duplicated. Return ONLY a JSON object:
+{ "meds": [ { "name": "generic name (brand if that's all that's shown)", "dose": "dose + frequency, e.g., 10 mg daily" } ] }
+Do not invent medications or doses you cannot read. Return ONLY the JSON object, no markdown.`;
+    try {
+      const text = await callClaudeVisionMulti(prompt, files);
+      const data = parseAiJson(text);
+      const meds = Array.isArray(data.meds) ? data.meds : [];
+      if (!meds.length) { if (status) { status.textContent = 'No medications detected. Try a clearer photo.'; status.style.color = '#991b1b'; } event.target.value = ''; return; }
+      // Drop the seeded empty row if it's blank
+      const wrap = $('homeMedRows');
+      if (wrap) { const rows = wrap.querySelectorAll('.hm-row'); if (rows.length === 1 && !rows[0].querySelector('.hm-name').value.trim()) rows[0].remove(); }
+      meds.forEach(m => { if (m && (m.name || m.dose)) addHomeMedRow({ name: m.name || '', dose: m.dose || '' }); });
+      checkAllergyConflicts();
+      if (status) { status.innerHTML = '✓ Added ' + meds.length + ' home medication' + (meds.length === 1 ? '' : 's') + '. Review and confirm.'; status.style.color = '#16a34a'; }
+    } catch (err) {
+      if (status) { status.textContent = 'Failed: ' + (err.message || err); status.style.color = '#991b1b'; }
+    } finally {
+      event.target.value = '';
+    }
+  }
+
   // ====== Face sheet — past medical history photo (pilot) ======
   async function handleHistoryPhoto(event){
     const files = Array.from(event.target.files || []);
@@ -5598,6 +5906,10 @@ ${JSON.stringify(data, null, 2)}`;
       return;
     }
     const data = gatherAllData();
+    if (Array.isArray(data.allergyConflicts) && data.allergyConflicts.length) {
+      const lines = data.allergyConflicts.map(c => '• ' + c.medName + ' (' + c.src + ') vs allergy to ' + c.allergen + (c.reaction ? ' [' + c.reaction + ']' : '')).join('\n');
+      if (!confirm('⚠ ALLERGY CONFLICT detected:\n\n' + lines + '\n\nThe report will flag this. Continue generating?')) return;
+    }
     const btn = $('generateBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>Generating…';
@@ -6150,7 +6462,9 @@ ${JSON.stringify(data, null, 2)}`;
     if ($('medSummary')) $('medSummary').innerHTML = '';
     if ($('clinicalInterp')) $('clinicalInterp').innerHTML = '<span class="empty">Click the button above to get an AI clinical interpretation.</span>';
     if ($('labRows')) $('labRows').innerHTML = '';
+    if ($('homeMedRows')) { $('homeMedRows').innerHTML = ''; if (typeof addHomeMedRow === 'function') addHomeMedRow(); }
     if ($('pushMedRows')) $('pushMedRows').innerHTML = '';
+    if (typeof checkAllergyConflicts === 'function') checkAllergyConflicts();
     if (typeof flightEntries !== 'undefined') { flightEntries.length = 0; if (typeof renderFlightEntries === 'function') renderFlightEntries(); }
     if ($('vitalsTrendRows')) $('vitalsTrendRows').innerHTML = '';
     if ($('ocrVitalsStatus')) $('ocrVitalsStatus').textContent = '';
@@ -6273,6 +6587,7 @@ ${JSON.stringify(data, null, 2)}`;
         gauge: (d.querySelector('.iv-gauge') || {}).value || '',
         fluid: (d.querySelector('.iv-fluid') || {}).value || '' })),
       allergies: gatherAllergies(),
+      homeMeds: (typeof gatherHomeMeds === 'function') ? gatherHomeMeds() : [],
       labs: gatherLabRows(),
       pushMeds: (typeof gatherPushMeds === 'function') ? gatherPushMeds() : [],
       flight: (typeof flightEntries !== 'undefined') ? JSON.parse(JSON.stringify(flightEntries)) : [],
@@ -6315,6 +6630,7 @@ ${JSON.stringify(data, null, 2)}`;
         (a.items || []).forEach(it => addAllergyRow(it));
       }
       if ($('labRows')) { $('labRows').innerHTML = ''; (s.labs || []).forEach(l => addLabRow(l)); }
+      if ($('homeMedRows') && typeof addHomeMedRow === 'function') { $('homeMedRows').innerHTML = ''; (s.homeMeds || []).forEach(m => addHomeMedRow(m)); if (!(s.homeMeds || []).length) addHomeMedRow(); }
       if ($('pushMedRows') && typeof addPushMedRow === 'function') { $('pushMedRows').innerHTML = ''; (s.pushMeds || []).forEach(m => addPushMedRow(m)); }
       if (typeof flightEntries !== 'undefined') {
         flightEntries.length = 0;
@@ -6747,20 +7063,27 @@ ${JSON.stringify(data, null, 2)}`;
   function initSaveSystem(){
     document.addEventListener('input', scheduleAutosave, true);
     document.addEventListener('change', scheduleAutosave, true);
+    document.addEventListener('input', scheduleAllergyCheck, true);
+    document.addEventListener('change', scheduleAllergyCheck, true);
     updateRecordsBtn();
+    let recovered = false;
     try {
       const raw = localStorage.getItem(autosaveKey());
       if (raw) {
         const obj = JSON.parse(raw);
         if (obj && obj.state) {
           restoreState(obj.state);
+          recovered = true;
           setAutosaveStatus('Recovered autosave from ' + fmtDateTime(new Date(obj.savedAt)));
         }
       }
     } catch (e) { /* ignore corrupt autosave */ }
+    // Seed an empty home-med row if none restored
+    if ($('homeMedRows') && !$('homeMedRows').querySelector('.hm-row')) addHomeMedRow();
+    checkAllergyConflicts();
   }
   // Defer until the whole script has finished initializing the form
-  setTimeout(() => { if (typeof renderFlightEntries === 'function') renderFlightEntries(); if (typeof refreshTestBanner === 'function') refreshTestBanner(); initSaveSystem(); if (typeof checkHandoff === 'function') checkHandoff(); }, 0);
+  setTimeout(() => { if (typeof buildHomeMedDatalist === 'function') buildHomeMedDatalist(); if (typeof renderFlightEntries === 'function') renderFlightEntries(); if (typeof refreshTestBanner === 'function') refreshTestBanner(); initSaveSystem(); if (typeof checkHandoff === 'function') checkHandoff(); }, 0);
 
   // ====== Hospital address auto-fill ======
   const HOSPITAL_ADDRESSES = {
@@ -7661,6 +7984,26 @@ ${transcript}`;
         });
         html += '</tbody></table>';
       }
+    }
+
+    // Medication–allergy reconciliation alert (QI / medical-legal proof)
+    if (Array.isArray(d.allergyConflicts) && d.allergyConflicts.length) {
+      html += '<h2 style="color:#991b1b">⚠ Medication–Allergy Alert</h2>';
+      html += '<table><thead><tr><th>Medication</th><th>Source</th><th>Documented allergy</th><th>Reaction</th><th>Note</th></tr></thead><tbody>';
+      d.allergyConflicts.forEach(c => {
+        html += `<tr><td>${escapeHtml(c.medName || '')}</td><td>${escapeHtml(c.src || '')}</td><td>${escapeHtml(c.allergen || '')}</td><td>${escapeHtml(c.reaction || '')}</td><td>${escapeHtml(c.note || '')}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+
+    // Home Medications (PTA) — name, dose, and what it's used for
+    if (Array.isArray(d.homeMeds) && d.homeMeds.length) {
+      html += '<h2>Home Medications (PTA)</h2>';
+      html += '<table><thead><tr><th>Medication</th><th>Dose / Frequency</th><th>Used for</th></tr></thead><tbody>';
+      d.homeMeds.forEach(m => {
+        html += `<tr><td>${escapeHtml(m.name || '')}</td><td>${escapeHtml(m.dose || '')}</td><td>${escapeHtml(m.use || '')}</td></tr>`;
+      });
+      html += '</tbody></table>';
     }
 
     // Medications + drips — each subsection as its own paragraph
