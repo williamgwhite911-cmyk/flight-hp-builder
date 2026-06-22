@@ -331,53 +331,62 @@
   /* Print area — only visible when printing */
   #printArea { display: none; }
   @media print {
-    body { background: white; color: black; }
+    html, body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     header, .tabs, .form, .output, .modal-backdrop { display: none !important; }
     #printArea {
       display: block;
       padding: 0;
       margin: 0;
-      font-family: Georgia, "Times New Roman", serif;
-      color: black;
-      font-size: 11pt;
-      line-height: 1.4;
-    }
-    #printArea h1 {
-      font-size: 16pt; margin: 0 0 4px;
-      border-bottom: 2px solid black; padding-bottom: 4px;
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1e293b;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
     #printArea h2 {
-      font-size: 12pt; margin: 14px 0 4px;
-      text-transform: uppercase; letter-spacing: 0.5px;
-      border-bottom: 1px solid black; padding-bottom: 2px;
+      font-size: 11pt; margin: 14px 0 6px;
+      text-transform: uppercase; letter-spacing: 0.6px;
+      background: #0c4a6e; color: #fff;
+      padding: 5px 10px; border-radius: 4px;
+      border: none;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      page-break-after: avoid;
     }
+    #printArea h2[style*="color"] { background: #fef2f2; color: #b91c1c !important; border: 1.5px solid #dc2626; }
     #printArea .meta {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px 14px;
+      gap: 5px 16px;
       margin: 8px 0;
       font-size: 10pt;
+      background: #f0f9ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 9px 12px;
     }
-    #printArea .meta b { display: inline-block; min-width: 110px; }
+    #printArea .meta b { color: #0c4a6e; display: inline-block; min-width: 118px; }
     #printArea p, #printArea pre {
       margin: 4px 0;
       white-space: pre-wrap;
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: 11pt;
+      font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 10.5pt;
     }
     #printArea table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10pt;
-      margin: 4px 0;
+      font-size: 9.5pt;
+      margin: 6px 0;
+      page-break-inside: avoid;
     }
     #printArea th, #printArea td {
-      border: 1px solid #444;
-      padding: 4px 6px;
+      border: 1px solid #93c5fd;
+      padding: 5px 7px;
       text-align: left;
       vertical-align: top;
     }
-    #printArea th { background: #e5e5e5; }
+    #printArea th { background: #dbeafe; color: #0c4a6e; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #printArea tbody tr:nth-child(even) td { background: #f8fafc; }
     #printArea tr.lab-print-H td:nth-child(2),
     #printArea tr.lab-print-H td:nth-child(4) { font-weight: 700; }
     #printArea tr.lab-print-H td:nth-child(4) { color: #92400e; }
@@ -387,12 +396,13 @@
     #printArea tr.lab-print-critical td { background: #fee2e2; font-weight: 800; }
     #printArea tr.lab-print-critical td:nth-child(4) { color: #991b1b; }
     #printArea tr.lab-print-normal td:nth-child(4) { color: #166534; font-style: italic; }
+    #printArea .ekg-critical { color: #dc2626 !important; font-weight: 800 !important; animation: none !important; }
     #printArea .footer {
       margin-top: 18px;
       padding-top: 6px;
-      border-top: 1px solid #888;
+      border-top: 2px solid #0c4a6e;
       font-size: 8pt;
-      color: #444;
+      color: #475569;
       font-style: italic;
     }
     #printArea .patient-block {
@@ -402,28 +412,31 @@
       align-items: start;
       margin: 4px 0;
     }
+    #printArea .patient-photo { page-break-inside: avoid; }
     #printArea .patient-photo img {
-      max-width: 2.4in;
-      max-height: 1.6in;
+      max-width: 2.6in;
+      max-height: 1.9in;
       object-fit: contain;
-      border: 1px solid #444;
+      border: 2px solid #0c4a6e;
+      border-radius: 4px;
       display: block;
     }
     #printArea .patient-photo .photo-caption {
       font-size: 8pt;
-      color: #444;
+      color: #0c4a6e;
+      font-weight: 600;
       text-align: center;
       margin-top: 2px;
     }
     #printArea .license-extras {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 10px;
       margin: 6px 0 8px;
     }
     #printArea .license-extras .patient-photo img {
-      max-width: 2.0in;
-      max-height: 1.4in;
+      max-width: 2.6in;
+      max-height: 1.9in;
     }
     @page { size: letter; margin: 0.5in; }
   }
@@ -7856,11 +7869,11 @@ ${transcript}`;
     const dobAge = [p.dob, ageSex && `(${ageSex})`].filter(Boolean).join(' ');
 
     let html = '' +
-      '<div style="text-align:center;border-bottom:2px solid black;padding-bottom:6px;margin-bottom:8px">' +
-        '<div style="font-size:20pt;font-weight:bold;letter-spacing:2px;line-height:1.1">TRAUMA STAR</div>' +
-        '<div style="font-size:12pt;font-weight:bold;letter-spacing:0.5px">Monroe County Fire Rescue</div>' +
-        (d.statFlight ? `<div style="font-size:13pt;font-weight:bold;margin-top:3px">${escapeHtml(d.statFlight)}</div>` : '') +
-        '<div style="font-size:11pt;margin-top:3px">Flight Crew H&amp;P Report</div>' +
+      '<div style="text-align:center;background:#0c4a6e;color:#fff;padding:12px 10px;border-radius:6px;margin-bottom:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact">' +
+        '<div style="font-size:22pt;font-weight:800;letter-spacing:3px;line-height:1.05">TRAUMA STAR</div>' +
+        '<div style="font-size:12.5pt;font-weight:700;letter-spacing:1px;margin-top:1px">MONROE COUNTY FIRE RESCUE</div>' +
+        (d.statFlight ? `<div style="display:inline-block;margin-top:6px;padding:2px 12px;background:#fff;color:#0c4a6e;border-radius:12px;font-size:12pt;font-weight:800;-webkit-print-color-adjust:exact;print-color-adjust:exact">${escapeHtml(d.statFlight)}</div>` : '') +
+        '<div style="font-size:10.5pt;margin-top:6px;letter-spacing:0.5px;opacity:0.95">CRITICAL CARE FLIGHT — PATIENT CARE / H&amp;P REPORT</div>' +
       '</div>';
 
     // Flight info block
@@ -7869,6 +7882,13 @@ ${transcript}`;
     if (d.oca) flightMeta.push(['OCA number', d.oca]);
     if (d.ocaDate) flightMeta.push(['Date', d.ocaDate]);
     flightMeta.push(['Call type', d.mode === 'ift' ? 'Interfacility (IFT)' : 'Scene']);
+    // Pickup / origin location (sending facility for IFT, scene location for scene calls)
+    const pickupParts = (d.mode === 'ift')
+      ? [d.sending && d.sending.hospital, d.sending && d.sending.address]
+      : [d.sending && d.sending.location, d.sending && d.sending.agency, d.sending && d.sending.county];
+    const pickup = pickupParts.filter(Boolean).join(' — ');
+    if (pickup) flightMeta.push(['Pickup location', pickup]);
+    if (d.receiving && d.receiving.hospital) flightMeta.push(['Destination', d.receiving.hospital]);
     if (d.aircraft) flightMeta.push(['Aircraft', d.aircraft]);
     if (d.crewRN) flightMeta.push(['Flight RN', d.crewRN]);
     if (d.crewMedic) flightMeta.push(['Flight Paramedic', d.crewMedic]);
