@@ -2628,7 +2628,12 @@
   function renderLicensePreview(){
     const wrap = $('licensePreview');
     if (!wrap) return;
-    if (!licensePhotoDataUrls.length) { wrap.innerHTML = ''; return; }
+    const ocr = $('licenseOcrBlock');
+    if (!licensePhotoDataUrls.length) {
+      wrap.innerHTML = '';
+      if (ocr) ocr.style.display = 'none';
+      return;
+    }
     const thumbs = licensePhotoDataUrls.map((url, idx) => `
       <div class="photo-thumb">
         <img src="${url}" alt="License ${idx + 1}">
@@ -2639,6 +2644,7 @@
       <div class="photo-thumbs">${thumbs}</div>
       <button type="button" class="clear-btn" onclick="clearLicensePhotos()" style="margin-top:4px">Clear all (${licensePhotoDataUrls.length})</button>
     `;
+    if (ocr) ocr.style.display = 'block'; // auto-fill is available whenever a license photo is present
   }
 
   // ====== Face sheet / wristband / MRN sticker photos (array) ======
@@ -2669,7 +2675,12 @@
   function renderFaceSheetPreview(){
     const wrap = $('faceSheetPreview');
     if (!wrap) return;
-    if (!faceSheetPhotoDataUrls.length) { wrap.innerHTML = ''; return; }
+    const ocr = $('faceSheetOcrBlock');
+    if (!faceSheetPhotoDataUrls.length) {
+      wrap.innerHTML = '';
+      if (ocr) ocr.style.display = 'none';
+      return;
+    }
     const thumbs = faceSheetPhotoDataUrls.map((url, idx) => `
       <div class="photo-thumb">
         <img src="${url}" alt="Face sheet ${idx + 1}">
@@ -2680,6 +2691,7 @@
       <div class="photo-thumbs">${thumbs}</div>
       <button type="button" class="clear-btn" onclick="clearFaceSheetPhotos()" style="margin-top:4px">Clear all (${faceSheetPhotoDataUrls.length})</button>
     `;
+    if (ocr) ocr.style.display = 'block'; // auto-fill is available whenever a face-sheet photo is present
   }
 
   // Convert stored data URLs back to File objects for the vision API call.
@@ -3860,7 +3872,10 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
   // ====== Photo OCR (Phase 4 — pilot only) ======
   function refreshPhotoOcrUi(){
     const on = loadSettings().photoOcr;
-    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockAbg', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'ocrBlockVitals', 'licenseOcrBlock', 'faceSheetOcrBlock'].forEach(id => {
+    // NOTE: licenseOcrBlock / faceSheetOcrBlock are intentionally NOT gated here —
+    // their auto-fill buttons are revealed by renderLicensePreview / renderFaceSheetPreview
+    // whenever a photo is present, independent of this IV/vent pilot toggle.
+    ['ocrBlockIv', 'ocrBlockVent', 'ocrBlockAbg', 'ocrBlockLabs', 'ocrBlockRad', 'ocrBlockMeds', 'ocrBlockHistory', 'ocrBlockVitals'].forEach(id => {
       const el = $(id);
       if (el) el.style.display = on ? 'block' : 'none';
     });
