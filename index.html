@@ -572,6 +572,15 @@
   }
   .ai-out.show { display: block; }
   .ai-out strong { color: #0c4a6e; }
+  /* Life-threatening EKG interpretation — red, bold, flashing */
+  @keyframes ekgCritFlash { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .ekg-critical { color: #dc2626 !important; font-weight: 800 !important; animation: ekgCritFlash 0.9s ease-in-out infinite; }
+  .ekg-critical-banner {
+    display: none; margin-top: 6px; padding: 8px 12px; border: 2px solid #dc2626;
+    border-radius: 8px; background: #fef2f2; color: #dc2626; font-weight: 800; font-size: 13px;
+    animation: ekgCritFlash 0.9s ease-in-out infinite;
+  }
+  .ekg-critical-banner.show { display: block; }
   .ai-tool-block {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -1429,9 +1438,10 @@
             <div id="ekgStatus" class="hint"></div>
           </div>
 
+          <div id="ekgCriticalBanner" class="ekg-critical-banner"></div>
           <label style="margin-top:10px">EKG Interpretation / Diagnosis</label>
-          <textarea id="ekgInterp" placeholder="Rate: 88 bpm; Rhythm: normal sinus; Axis: normal; Intervals: PR 160 ms, QRS 90 ms, QTc 430 ms; ST/T: ST elevation in II, III, aVF with reciprocal depression in I, aVL; Interpretation: acute inferior STEMI"></textarea>
-          <button type="button" class="clear-btn" onclick="$('ekgInterp').value=''" style="width:100%;margin-top:4px">Clear interpretation</button>
+          <textarea id="ekgInterp" oninput="updateEkgCritical()" placeholder="Rate: 88 bpm; Rhythm: normal sinus; Axis: normal; Intervals: PR 160 ms, QRS 90 ms, QTc 430 ms; ST/T: ST elevation in II, III, aVF with reciprocal depression in I, aVL; Interpretation: acute inferior STEMI"></textarea>
+          <button type="button" class="clear-btn" onclick="$('ekgInterp').value='';updateEkgCritical()" style="width:100%;margin-top:4px">Clear interpretation</button>
         </div>
       </details>
     </fieldset>
@@ -2777,6 +2787,40 @@ ST/T changes: (ST elevation or depression with the SPECIFIC leads and the territ
 Transport action plan: (concise, prioritized recommendations appropriate for a critical-care flight crew for THIS rhythm/finding — e.g., for symptomatic bradycardia/high-grade or complete heart block: atropine, transcutaneous pacing pads ready/active with sedation, chronotropic infusion such as epinephrine or dopamine, treat reversible causes; for STEMI: activate cath lab/notify receiving, ASA, nitro/heparin per protocol and contraindications, defib pads on; for unstable tachydysrhythmia: synchronized cardioversion vs rate/rhythm control; for wide-complex tachycardia of uncertain origin: treat as VT; always include continuous monitoring, defib/pacer pads, IV access, and what to anticipate en route. End this section with: "Confirm with medical control / receiving physician and follow protocol; clinical judgment overrides.")
 Do not add other disclaimers. Return plain text only, no markdown.`;
 
+  // Life-threatening EKG findings -> displayed in flashing red bold.
+  const LIFE_THREATENING_EKG = [
+    /\bstemi\b/i, /st[\s-]*elevation/i, /\bomi\b/i,
+    /ventricular tachycardia/i, /v[\s-]*tach/i, /\bvt\b/i, /polymorphic/i, /torsade/i,
+    /ventricular fibrillation/i, /v[\s-]*fib/i, /\bvf\b/i,
+    /complete heart block/i, /(third|3rd)[\s-]*degree/i, /3°/i, /av dissociation/i,
+    /high[\s-]*grade .*block/i, /mobitz ii/i, /mobitz 2/i, /2:1 (av )?block/i,
+    /asystole/i, /agonal/i, /ventricular standstill/i, /idioventricular/i,
+    /\bwide[\s-]*complex tachycardia/i, /sine wave/i, /hyperkalemi/i, /brugada/i,
+    /profound brady/i, /severe brady/i, /\bsvt\b.*unstable/i
+  ];
+  function isLifeThreateningEkg(text){
+    const t = String(text || '');
+    return LIFE_THREATENING_EKG.some(re => re.test(t));
+  }
+  // Pull the "Interpretation:" line (or the first non-empty line) for banner display.
+  function ekgInterpLine(text){
+    const m = String(text || '').match(/^\s*Interpretation:\s*(.+)$/im);
+    if (m) return m[1].trim();
+    const first = String(text || '').split('\n').map(s => s.trim()).filter(Boolean)[0];
+    return first || '';
+  }
+  function updateEkgCritical(){
+    const banner = $('ekgCriticalBanner'); if (!banner) return;
+    const txt = (typeof val === 'function') ? val('ekgInterp') : ($('ekgInterp') ? $('ekgInterp').value : '');
+    if (txt && isLifeThreateningEkg(txt)) {
+      banner.textContent = '⚠ LIFE-THREATENING EKG: ' + (ekgInterpLine(txt) || 'critical finding — act now');
+      banner.classList.add('show');
+    } else {
+      banner.classList.remove('show');
+      banner.textContent = '';
+    }
+  }
+
   // ====== EKG / rhythm strip photos (array; embedded in print) ======
   let ekgPhotoDataUrls = [];
   async function handleEkgPhoto(event){
@@ -2827,6 +2871,7 @@ Do not add other disclaimers. Return plain text only, no markdown.`;
       const ta = $('ekgInterp');
       const clean = String(text || '').trim();
       ta.value = ta.value.trim() ? ta.value.trim() + '\n\n' + clean : clean;
+      updateEkgCritical();
       if (status) { status.innerHTML = '✓ Interpretation added below. Review and correct before use.'; status.style.color = '#16a34a'; }
     } catch (err) {
       if (status) { status.textContent = 'Interpretation failed: ' + (err.message || err); status.style.color = '#991b1b'; }
@@ -5403,7 +5448,7 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
         <button type="button" class="calc-btn" id="rhythmBtn_${e.id}" style="width:auto;margin-top:4px" onclick="pickFlightRhythmPhoto('${e.id}')">🫀 Interpret rhythm strip (photo)</button>
         <span id="rhythmStatus_${e.id}" class="hint" style="margin-left:8px"></span>
         ${e.rhythmPhoto ? `<div class="photo-thumbs" style="margin-top:6px"><div class="photo-thumb"><img src="${e.rhythmPhoto}" alt="Rhythm strip"><button type="button" class="photo-thumb-remove" onclick="removeFlightRhythmPhoto('${e.id}')" title="Remove">×</button></div></div>` : ''}
-        <div id="rhythmOut_${e.id}" class="ai-out ${e.rhythmInterp ? 'show' : ''}">${e.rhythmInterp ? '<strong>Rhythm interpretation</strong><br>' + formatAiText(e.rhythmInterp) : ''}</div>
+        <div id="rhythmOut_${e.id}" class="ai-out ${e.rhythmInterp ? 'show' : ''}">${e.rhythmInterp ? ((isLifeThreateningEkg(e.rhythmInterp) ? '<div class="ekg-critical">⚠ LIFE-THREATENING: ' + escapeHtml(ekgInterpLine(e.rhythmInterp)) + '</div>' : '') + '<strong>Rhythm interpretation</strong><br>' + formatAiText(e.rhythmInterp)) : ''}</div>
         <div class="sub-h">Ventilator settings</div>
         <div class="row-4">
           <div><label>Mode</label><input type="text" value="${attrEsc(vt.mode)}" onchange="updFlight('${e.id}','vent.mode',this.value)"></div>
@@ -6778,6 +6823,7 @@ ${JSON.stringify(data, null, 2)}`;
       dxSelected.length = 0; (s.dx || []).forEach(x => dxSelected.push(x)); renderDxChips();
       if (typeof ekgPhotoDataUrls !== 'undefined') { ekgPhotoDataUrls = (s.ekgPhotos || []).slice(); if (typeof renderEkgPreview === 'function') renderEkgPreview(); }
       if (typeof bottlePhotoDataUrls !== 'undefined') { bottlePhotoDataUrls = (s.bottlePhotos || []).slice(); if (typeof renderBottlePreview === 'function') renderBottlePreview(); }
+      if (typeof updateEkgCritical === 'function') updateEkgCritical();
       const setOut = (id, o) => { const el = $(id); if (el && o) { el.textContent = o.text; el.classList.toggle('polished', !!o.polished); } };
       if (s.outputs) {
         setOut('narrativeOut', s.outputs.narrative); setOut('templateOut', s.outputs.template);
@@ -8067,6 +8113,7 @@ ${transcript}`;
     const hasEkgPhoto = ekgPhotoDataUrls && ekgPhotoDataUrls.length;
     if (d.ekg || hasEkgPhoto) {
       html += '<h2>Cardiac / EKG</h2>';
+      if (d.ekg && isLifeThreateningEkg(d.ekg)) html += `<p class="ekg-critical">⚠ LIFE-THREATENING: ${escapeHtml(ekgInterpLine(d.ekg))}</p>`;
       if (d.ekg) html += paragraphize(d.ekg);
       if (hasEkgPhoto) {
         html += '<div class="license-extras">';
@@ -8084,6 +8131,7 @@ ${transcript}`;
       rhythmEntries.forEach(e => {
         const t = e.time ? escapeHtml(e.time) : '';
         if (t) html += `<p><b>Time:</b> ${t}</p>`;
+        if (e.rhythmInterp && isLifeThreateningEkg(e.rhythmInterp)) html += `<p class="ekg-critical">⚠ LIFE-THREATENING: ${escapeHtml(ekgInterpLine(e.rhythmInterp))}</p>`;
         if (e.rhythmInterp) html += paragraphize(e.rhythmInterp);
         if (e.rhythmPhoto) {
           html += '<div class="license-extras">';
