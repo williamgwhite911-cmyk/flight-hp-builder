@@ -7855,7 +7855,13 @@ ${transcript}`;
     const ageSex = [p.age && `${p.age} yo`, p.sex].filter(Boolean).join(' ');
     const dobAge = [p.dob, ageSex && `(${ageSex})`].filter(Boolean).join(' ');
 
-    let html = '<h1>Flight Crew H&P Report</h1>';
+    let html = '' +
+      '<div style="text-align:center;border-bottom:2px solid black;padding-bottom:6px;margin-bottom:8px">' +
+        '<div style="font-size:20pt;font-weight:bold;letter-spacing:2px;line-height:1.1">TRAUMA STAR</div>' +
+        '<div style="font-size:12pt;font-weight:bold;letter-spacing:0.5px">Monroe County Fire Rescue</div>' +
+        (d.statFlight ? `<div style="font-size:13pt;font-weight:bold;margin-top:3px">${escapeHtml(d.statFlight)}</div>` : '') +
+        '<div style="font-size:11pt;margin-top:3px">Flight Crew H&amp;P Report</div>' +
+      '</div>';
 
     // Flight info block
     const flightMeta = [];
@@ -7863,7 +7869,6 @@ ${transcript}`;
     if (d.oca) flightMeta.push(['OCA number', d.oca]);
     if (d.ocaDate) flightMeta.push(['Date', d.ocaDate]);
     flightMeta.push(['Call type', d.mode === 'ift' ? 'Interfacility (IFT)' : 'Scene']);
-    if (d.statFlight) flightMeta.push(['Flight number', d.statFlight]);
     if (d.aircraft) flightMeta.push(['Aircraft', d.aircraft]);
     if (d.crewRN) flightMeta.push(['Flight RN', d.crewRN]);
     if (d.crewMedic) flightMeta.push(['Flight Paramedic', d.crewMedic]);
