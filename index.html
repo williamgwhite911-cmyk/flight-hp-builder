@@ -235,6 +235,23 @@
     margin-top: 4px;
   }
   .add-btn:hover { background: #e2e8f0; }
+  /* Prominent Add-Allergy button */
+  .add-allergy-btn {
+    background: #dc2626;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 6px;
+    box-shadow: 0 1px 3px rgba(220,38,38,0.35);
+  }
+  .add-allergy-btn:hover { background: #b91c1c; }
+  .add-allergy-btn:active { transform: translateY(1px); }
 
   /* Dictation (Web Speech API) — listening state */
   .add-btn.dictating { background: #dc2626; color: #fff; border-color: #dc2626; border-style: solid; animation: dictatePulse 1.1s ease-in-out infinite; }
@@ -1150,7 +1167,7 @@
             <label><input type="radio" name="allergyStatus" value="nka"><span>NKA (all)</span></label>
           </div>
           <div id="allergyList"></div>
-          <button type="button" class="add-btn" onclick="addAllergyRow()">+ Add allergy</button>
+          <button type="button" class="add-allergy-btn" onclick="addAllergyRow()">➕ Add Allergy</button>
           <label style="margin-top:10px">Additional allergy notes (free text)</label>
           <textarea id="allergyFreeText" oninput="scheduleAllergyCheck()" placeholder="e.g., Penicillin — anaphylaxis (childhood); shellfish — hives; contrast dye — itching; latex sensitivity"></textarea>
           <div class="hint">Include allergen, type, and reaction. Switch to NKDA or NKA to indicate no allergies. Free-text allergens are also checked against medications given.</div>
