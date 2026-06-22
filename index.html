@@ -1129,7 +1129,9 @@
           </div>
           <div id="allergyList"></div>
           <button type="button" class="add-btn" onclick="addAllergyRow()">+ Add allergy</button>
-          <div class="hint">Include allergen, type, and reaction. Switch to NKDA or NKA to indicate no allergies.</div>
+          <label style="margin-top:10px">Additional allergy notes (free text)</label>
+          <textarea id="allergyFreeText" oninput="scheduleAllergyCheck()" placeholder="e.g., Penicillin — anaphylaxis (childhood); shellfish — hives; contrast dye — itching; latex sensitivity"></textarea>
+          <div class="hint">Include allergen, type, and reaction. Switch to NKDA or NKA to indicate no allergies. Free-text allergens are also checked against medications given.</div>
         </div>
       </details>
     </fieldset>
@@ -1623,6 +1625,8 @@
         <div class="fieldset-body">
           <div class="hint">The patient's pre-existing home medications. Pick from the list (generic or brand) or type your own; the dose suggestions and a short "used for" summary auto-fill. These are reconciled against allergies — any conflict shows a red alert at the top.</div>
           <div id="homeMedRows"></div>
+          <label style="margin-top:10px">Additional home medication notes (free text)</label>
+          <textarea id="homeMedsFreeText" oninput="scheduleAllergyCheck()" placeholder="e.g., Patient unsure of doses; takes a water pill and a blood pressure pill; insulin at home — sliding scale; herbal supplements"></textarea>
           <button type="button" class="calc-btn" style="width:auto;margin-top:6px" onclick="addHomeMedRow()">➕ Add home medication</button>
 
           <div class="ai-tool-block" style="margin-top:12px">
@@ -4009,6 +4013,7 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
                 ext: val('aExt'), neuro: val('aNeuro') },
       ivs: gatherIVs(),
       homeMeds: gatherHomeMeds(),
+      homeMedsNotes: val('homeMedsFreeText'),
       allergyConflicts: computeAllergyConflicts(),
       meds: val('medsPTA'),
       drips: val('drips'),
@@ -4126,11 +4131,11 @@ The patient's acuity was classified as [acuity] due to [reason matching the diag
 CRITICAL INSTRUCTIONS:
 - Use exact times, names, doses, and numbers from the data; do not invent values.
 - If "times.roomEntry" is provided, include it in the narrative as the time the flight crew entered the room/ambulance. If "times.monitorApplied" is provided, note when the cardiac monitor was applied. Mention these in the patient handoff / transport flow section, not in the H&P narrative.
-- Include allergies prominently in the template under a dedicated "Allergies:" line. If "allergies.status" is "nkda", write "NKDA". If "nka", write "NKA". Otherwise list each allergen with type and reaction (e.g., "Penicillin (Medication) — anaphylaxis; Shellfish (Food) — hives").
+- Include allergies prominently in the template under a dedicated "Allergies:" line. If "allergies.status" is "nkda", write "NKDA". If "nka", write "NKA". Otherwise list each allergen with type and reaction (e.g., "Penicillin (Medication) — anaphylaxis; Shellfish (Food) — hives"). Also incorporate any "allergies.freeText" notes.
 - If "vitalsTrend" has entries, render them in the template under a "Vital Signs Trend (in-flight):" line as a compact list ordered by time (e.g., "08:42 BP 138/82, HR 92, RR 18, SpO2 96%, EtCO2 35; 08:55 BP 122/74, HR 88, RR 16, SpO2 98%, EtCO2 36"). In the narrative, reference any clinically significant trend (e.g., "BP normalized after fluid resuscitation between 08:42 and 09:10").
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
 - If "ekg" is provided, include the EKG interpretation/diagnosis under the diagnostic studies in both the narrative and the template (e.g., "EKG: acute inferior STEMI"). Use only what the "ekg" text states; do not infer additional findings.
-- If "homeMeds" has entries, include a "Home Medications:" section in the template listing each medication with its dose (e.g., "Lisinopril 10 mg daily; Metformin 1000 mg BID"). Reference clinically relevant home meds (anticoagulants, antiplatelets, beta-blockers, insulin, immunosuppressants) in the narrative where pertinent. Do not invent home meds, doses, or uses not provided.
+- If "homeMeds" has entries, include a "Home Medications:" section in the template listing each medication with its dose (e.g., "Lisinopril 10 mg daily; Metformin 1000 mg BID"). Also incorporate any "homeMedsNotes" free text. Reference clinically relevant home meds (anticoagulants, antiplatelets, beta-blockers, insulin, immunosuppressants) in the narrative where pertinent. Do not invent home meds, doses, or uses not provided.
 - If "allergyConflicts" is a non-empty array, you MUST add a clearly worded SAFETY ALERT line in BOTH outputs, e.g., "⚠ ALLERGY ALERT: [medName] was administered/listed despite a documented allergy to [allergen] ([reaction])." List every conflict. Do not soften or omit it. If "allergyConflicts" is empty, do not mention any conflict.
 - MENTAL-STATUS / BRIEFING RULE: Judge the patient's mental status from the data (assess.gcs, assess.rass, sedation, vent/intubation, and any "unresponsive / sedated / intubated / obtunded / comatose / altered" wording in cc, onset, or assess.neuro). If the patient is unconscious, sedated, intubated, or has altered mental status (e.g., GCS < 14, RASS ≤ -1, or sedation/intubation present), DO NOT write that the patient was briefed about their condition or the transport plan or that they "acknowledged"/"verbalized" understanding. Instead state that the patient could not be briefed due to their condition (name the reason — sedation, intubation, or altered mental status) and that the family/POA/sending team was informed if the data supports it. Use the "briefed" field as the source of truth when present, but never assert patient understanding that contradicts the documented mental status. Only state the patient was briefed and understood when the data shows they were alert/oriented enough to do so.
 - Use professional EMS/clinical language.
@@ -4905,13 +4910,14 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
   }
   function gatherAllergies(){
     const status = (document.querySelector('input[name=allergyStatus]:checked') || {}).value || 'has';
-    if (status === 'nkda' || status === 'nka') return { status, items: [] };
+    const freeText = (typeof val === 'function') ? val('allergyFreeText') : '';
+    if (status === 'nkda' || status === 'nka') return { status, items: [], freeText };
     const items = Array.from(document.querySelectorAll('#allergyList .allergy-row')).map(div => ({
       allergen: div.querySelector('.alg-name').value.trim(),
       type: div.querySelector('.alg-type').value,
       reaction: div.querySelector('.alg-rxn').value.trim(),
     })).filter(a => a.allergen);
-    return { status: 'has', items };
+    return { status: 'has', items, freeText };
   }
   // When NKDA/NKA is selected, hide the row list and disable add button
   document.querySelectorAll('input[name=allergyStatus]').forEach(r => {
@@ -5271,16 +5277,29 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
     }
     return out;
   }
+  // Parse a free-text allergy field into allergen entries ("Penicillin — anaphylaxis; shellfish — hives").
+  function parseFreeTextAllergens(txt){
+    if (!txt) return [];
+    return String(txt).split(/[;\n]/).map(seg => {
+      const s = seg.trim(); if (!s) return null;
+      const m = s.split(/\s*[—\-:(]\s*/); // split allergen from reaction
+      const allergen = (m[0] || '').trim();
+      const reaction = (m[1] || '').replace(/\)\s*$/, '').trim();
+      return allergen ? { allergen, reaction, type: '' } : null;
+    }).filter(Boolean);
+  }
   function computeAllergyConflicts(){
     const alg = (typeof gatherAllergies === 'function') ? gatherAllergies() : { status: 'has', items: [] };
-    if (!alg || alg.status === 'nkda' || alg.status === 'nka' || !Array.isArray(alg.items) || !alg.items.length) return [];
+    if (!alg || alg.status === 'nkda' || alg.status === 'nka') return [];
+    const allergens = (Array.isArray(alg.items) ? alg.items.slice() : []).concat(parseFreeTextAllergens(alg.freeText));
+    if (!allergens.length) return [];
     const meds = collectAdministeredMeds();
     const conflicts = [];
     const seen = {};
     meds.forEach(med => {
       const mn = normMed(med.name);
       if (!mn) return;
-      alg.items.forEach(a => {
+      allergens.forEach(a => {
         const an = normMed(a.allergen);
         if (!an) return;
         let hit = false, note = '';
@@ -7965,9 +7984,10 @@ ${transcript}`;
           html += `<tr><td><b>${escapeHtml(it.allergen || '')}</b></td><td>${escapeHtml(it.type || '')}</td><td>${escapeHtml(it.reaction || '')}</td></tr>`;
         });
         html += '</tbody></table>';
-      } else {
+      } else if (!a.freeText) {
         html += '<p><i>Not documented</i></p>';
       }
+      if (a.freeText) { html += `<p><b>Notes:</b> ${escapeHtml(a.freeText).replace(/\n/g, '<br>')}</p>`; }
     }
 
     // Logistics block (sending / receiving / times / distance)
@@ -8214,7 +8234,7 @@ ${transcript}`;
 
     // Home Medications (PTA) — name, dose, and what it's used for
     const hasBottlePhotos = (typeof bottlePhotoDataUrls !== 'undefined') && bottlePhotoDataUrls && bottlePhotoDataUrls.length;
-    if ((Array.isArray(d.homeMeds) && d.homeMeds.length) || hasBottlePhotos) {
+    if ((Array.isArray(d.homeMeds) && d.homeMeds.length) || d.homeMedsNotes || hasBottlePhotos) {
       html += '<h2>Home Medications (PTA)</h2>';
       if (Array.isArray(d.homeMeds) && d.homeMeds.length) {
         html += '<table><thead><tr><th>Medication</th><th>Dose / Frequency</th><th>Used for</th></tr></thead><tbody>';
@@ -8223,6 +8243,7 @@ ${transcript}`;
         });
         html += '</tbody></table>';
       }
+      if (d.homeMedsNotes) { html += '<p><b>Notes:</b></p>'; html += paragraphize(d.homeMedsNotes); }
       if (hasBottlePhotos) {
         html += '<p><b>Medication bottle labels (verification photos):</b></p>';
         html += '<div class="license-extras">';
