@@ -397,6 +397,11 @@
     #printArea tr.lab-print-critical td:nth-child(4) { color: #991b1b; }
     #printArea tr.lab-print-normal td:nth-child(4) { color: #166534; font-style: italic; }
     #printArea .ekg-critical { color: #dc2626 !important; font-weight: 800 !important; animation: none !important; }
+    /* Allergy table — red, bold, obvious in print */
+    #printArea .alg-table th { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    #printArea .alg-table td { border-color: #fca5a5; }
+    #printArea .alg-table tbody tr td { background: #fef2f2; }
+    #printArea .alg-cell { color: #991b1b; font-weight: 800; }
     #printArea .footer {
       margin-top: 18px;
       padding-top: 6px;
@@ -7995,19 +8000,21 @@ ${transcript}`;
     // Allergies block — prominent, right after Patient
     if (d.allergies) {
       const a = d.allergies;
-      html += '<h2>Allergies</h2>';
+      const hasAllergies = a.status !== 'nkda' && a.status !== 'nka' && ((Array.isArray(a.items) && a.items.length) || a.freeText);
+      // Red attention header when actual allergies exist; plain otherwise (NKDA/NKA is reassuring)
+      html += hasAllergies ? '<h2 style="color:#b91c1c">⚠ Allergies</h2>' : '<h2>Allergies</h2>';
       if (a.status === 'nkda') html += '<p><b>NKDA</b> (No Known Drug Allergies)</p>';
       else if (a.status === 'nka') html += '<p><b>NKA</b> (No Known Allergies)</p>';
       else if (Array.isArray(a.items) && a.items.length) {
-        html += '<table><thead><tr><th>Allergen</th><th>Type</th><th>Reaction</th></tr></thead><tbody>';
+        html += '<table class="alg-table"><thead><tr><th>Allergen</th><th>Type</th><th>Reaction</th></tr></thead><tbody>';
         a.items.forEach(it => {
-          html += `<tr><td><b>${escapeHtml(it.allergen || '')}</b></td><td>${escapeHtml(it.type || '')}</td><td>${escapeHtml(it.reaction || '')}</td></tr>`;
+          html += `<tr><td class="alg-cell">${escapeHtml(it.allergen || '')}</td><td>${escapeHtml(it.type || '')}</td><td>${escapeHtml(it.reaction || '')}</td></tr>`;
         });
         html += '</tbody></table>';
       } else if (!a.freeText) {
         html += '<p><i>Not documented</i></p>';
       }
-      if (a.freeText) { html += `<p><b>Notes:</b> ${escapeHtml(a.freeText).replace(/\n/g, '<br>')}</p>`; }
+      if (a.freeText) { html += `<p class="alg-cell"><b>Notes:</b> ${escapeHtml(a.freeText).replace(/\n/g, '<br>')}</p>`; }
     }
 
     // Logistics block (sending / receiving / times / distance)
