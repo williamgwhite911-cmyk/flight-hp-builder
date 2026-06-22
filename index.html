@@ -1899,8 +1899,11 @@
             <option value="and the patient acknowledged understanding">Yes - acknowledged understanding</option>
             <option value="and the patient is sedated/unresponsive; family briefed">Patient sedated, family briefed</option>
             <option value="and the patient is intubated; family briefed">Patient intubated, family briefed</option>
+            <option value="; the patient was unconscious/altered and could not be briefed, and family/POA was informed">Unconscious/altered — family/POA informed</option>
+            <option value="; the patient was unconscious/altered and could not be briefed; no family/POA available">Unconscious/altered — no family available</option>
             <option value="">Other</option>
           </select>
+          <div class="hint">If the patient is unconscious, sedated, intubated, or has altered mental status, the narrative will NOT state they were briefed or acknowledged understanding — it documents that they could not be briefed (and who was informed instead).</div>
         </div>
       </details>
     </fieldset>
@@ -3998,7 +4001,7 @@ Ventilator Settings (only include this section if patient is intubated; Hamilton
 
 Transport Details and Justification
 
-The patient was briefed about their condition and the transport plan [briefed text]. Belongings were handed to [belongings]. All drips were transitioned to flight-compatible pumps and the patient was placed on a cardiac monitor. The patient was safely transferred to the stretcher using the sheet method.
+[Patient-briefing sentence phrased to match the patient's mental status per the MENTAL-STATUS / BRIEFING RULE below, incorporating the "briefed" value — do NOT claim the patient was briefed or acknowledged understanding if they are unconscious/sedated/intubated/altered.] Belongings were handed to [belongings]. All drips were transitioned to flight-compatible pumps and the patient was placed on a cardiac monitor. The patient was safely transferred to the stretcher using the sheet method.
 
 Air transport was chosen due to the need for [reason 1], [reason 2], and a significant time savings compared to ground transport.
 
@@ -4017,6 +4020,7 @@ CRITICAL INSTRUCTIONS:
 - If "ekg" is provided, include the EKG interpretation/diagnosis under the diagnostic studies in both the narrative and the template (e.g., "EKG: acute inferior STEMI"). Use only what the "ekg" text states; do not infer additional findings.
 - If "homeMeds" has entries, include a "Home Medications:" section in the template listing each medication with its dose (e.g., "Lisinopril 10 mg daily; Metformin 1000 mg BID"). Reference clinically relevant home meds (anticoagulants, antiplatelets, beta-blockers, insulin, immunosuppressants) in the narrative where pertinent. Do not invent home meds, doses, or uses not provided.
 - If "allergyConflicts" is a non-empty array, you MUST add a clearly worded SAFETY ALERT line in BOTH outputs, e.g., "⚠ ALLERGY ALERT: [medName] was administered/listed despite a documented allergy to [allergen] ([reaction])." List every conflict. Do not soften or omit it. If "allergyConflicts" is empty, do not mention any conflict.
+- MENTAL-STATUS / BRIEFING RULE: Judge the patient's mental status from the data (assess.gcs, assess.rass, sedation, vent/intubation, and any "unresponsive / sedated / intubated / obtunded / comatose / altered" wording in cc, onset, or assess.neuro). If the patient is unconscious, sedated, intubated, or has altered mental status (e.g., GCS < 14, RASS ≤ -1, or sedation/intubation present), DO NOT write that the patient was briefed about their condition or the transport plan or that they "acknowledged"/"verbalized" understanding. Instead state that the patient could not be briefed due to their condition (name the reason — sedation, intubation, or altered mental status) and that the family/POA/sending team was informed if the data supports it. Use the "briefed" field as the source of truth when present, but never assert patient understanding that contradicts the documented mental status. Only state the patient was briefed and understood when the data shows they were alert/oriented enough to do so.
 - Use professional EMS/clinical language.
 - Do not use em dashes.
 - Return your response as a single JSON object with THREE keys:
@@ -6186,6 +6190,7 @@ CRITICAL RULES:
 - Omit any line, sentence, or item for which no data is provided. Never invent values, names, times, vitals, or findings.
 - The ONLY headings allowed are the two section headers exactly as written above. No bullet points in the MEDICAL RECORD, no markdown, no code fences, no JSON.
 - Use the flight unit value verbatim (e.g., "Trauma Star 2"). Past tense throughout.
+- MENTAL-STATUS / BRIEFING RULE: If the patient is unconscious, sedated, intubated, or has altered mental status (judge from assess.gcs, assess.rass, sedation, ventilator/intubation, and any "unresponsive/sedated/intubated/obtunded/comatose/altered" wording), do NOT state the patient was briefed or that they acknowledged/verbalized understanding. Instead document that the patient could not be briefed due to their condition (name the reason) and that family/POA/sending team was informed if the data supports it. Use the "briefed" field as the source of truth; only state the patient was briefed and understood when the data shows they were alert/oriented enough to do so.
 
 ===== GOLD-STANDARD EXAMPLE (style/structure for the MEDICAL RECORD only — do not reuse its content) =====
 ${COMBINED_GOLD_EXAMPLE}
@@ -6237,6 +6242,7 @@ OUTPUT RULES (follow strictly):
 - If information required by a paragraph is NOT present in the source data, do NOT omit the paragraph silently. Instead, write the paragraph with whatever IS documented, then on a new line within that paragraph add a flag in this exact form: "🚩 REQUIRED: <list the specific missing items the paragraph needs>." If a whole paragraph's content is absent (common for the in-flight, offload, and handoff phases when only pre-transport records were provided), state plainly that the phase is not documented in the source and add the 🚩 REQUIRED line listing what is needed.
 - After the 11 paragraphs, add a final section header "INFORMATION REQUIRED TO COMPLETE THIS CHART" followed by a consolidated numbered list of every missing item flagged above.
 - If two sources conflict (e.g., a verbal handoff vs a printed MAR), treat the printed/official document as authoritative and add a "🚩 RECONCILE:" note describing the conflict.
+- MENTAL-STATUS / BRIEFING RULE: If the patient is unconscious, sedated, intubated, or has altered mental status (judge from assess.gcs, assess.rass, sedation, ventilator/intubation, and any "unresponsive/sedated/intubated/obtunded/comatose/altered" wording), do NOT state the patient was briefed about the transport/condition or that they acknowledged/verbalized understanding. Document instead that the patient could not be briefed due to their condition (name the reason) and that family/POA/sending team was informed if the data supports it. Use the "briefed" field as the source of truth; only state the patient was briefed and understood when the data shows they were alert/oriented enough to do so.
 
 THE 11 PARAGRAPHS:
 PARAGRAPH 1 — TRANSPORT REQUEST AND ACCEPTANCE. Flight program/unit; referring provider name + credentials; sending hospital; receiving hospital; receiving physician + specialty; patient age and gender; primary diagnoses; reason for transfer; specialty services unavailable at the sending facility. Describe why the patient requires transfer and what higher level of care the receiving facility provides.
