@@ -2738,23 +2738,21 @@ Do not add other disclaimers. Return plain text only, no markdown.`;
 
   // ====== EKG / rhythm strip photos (array; embedded in print) ======
   let ekgPhotoDataUrls = [];
-  function handleEkgPhoto(event){
+  async function handleEkgPhoto(event){
     const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-    let remaining = files.length;
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        ekgPhotoDataUrls.push(e.target.result);
-        if (--remaining === 0) renderEkgPreview();
-      };
-      reader.onerror = () => { if (--remaining === 0) renderEkgPreview(); };
-      reader.readAsDataURL(file);
-    });
     event.target.value = '';
+    if (!files.length) return;
+    for (const file of files) {
+      try {
+        const raw = await readFileAsDataUrl(file);
+        ekgPhotoDataUrls.push(await compressDataUrlForStorage(raw));
+      } catch (e) { /* skip unreadable file */ }
+    }
+    renderEkgPreview();
+    if (typeof scheduleAutosave === 'function') scheduleAutosave();
   }
-  function clearEkgPhotos(){ ekgPhotoDataUrls = []; renderEkgPreview(); }
-  function removeEkgPhotoAt(idx){ ekgPhotoDataUrls.splice(idx, 1); renderEkgPreview(); }
+  function clearEkgPhotos(){ ekgPhotoDataUrls = []; renderEkgPreview(); if (typeof scheduleAutosave === 'function') scheduleAutosave(); }
+  function removeEkgPhotoAt(idx){ ekgPhotoDataUrls.splice(idx, 1); renderEkgPreview(); if (typeof scheduleAutosave === 'function') scheduleAutosave(); }
   function renderEkgPreview(){
     const wrap = $('ekgPreview');
     if (!wrap) return;
@@ -4089,6 +4087,39 @@ Return ONLY the JSON object, no preamble or markdown fencing.`;
     return { b64: comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl, mediaType: 'image/jpeg' };
   }
 
+  // Resize a data URL to a storage-friendly JPEG (legible strip, modest size) so EKG /
+  // rhythm-strip images can be persisted in saved records for QI / medical-legal proof
+  // without exhausting localStorage. Returns a JPEG data URL (or the original on failure).
+  function compressDataUrlForStorage(dataUrl, maxDim, quality){
+    maxDim = maxDim || 1600; quality = quality || 0.72;
+    return new Promise((resolve) => {
+      try {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            let { width, height } = img;
+            const longest = Math.max(width, height);
+            if (longest > maxDim) { const s = maxDim / longest; width = Math.round(width * s); height = Math.round(height * s); }
+            const canvas = document.createElement('canvas');
+            canvas.width = width; canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          } catch (e) { resolve(dataUrl); }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      } catch (e) { resolve(dataUrl); }
+    });
+  }
+  function readFileAsDataUrl(file){
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
   async function callClaudeVision(prompt, file){
     const settings = loadSettings();
     if (!settings.anthropic) throw new Error('No API key set. Open Settings.');
@@ -5055,6 +5086,7 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
         </div>
         <button type="button" class="calc-btn" id="rhythmBtn_${e.id}" style="width:auto;margin-top:4px" onclick="pickFlightRhythmPhoto('${e.id}')">🫀 Interpret rhythm strip (photo)</button>
         <span id="rhythmStatus_${e.id}" class="hint" style="margin-left:8px"></span>
+        ${e.rhythmPhoto ? `<div class="photo-thumbs" style="margin-top:6px"><div class="photo-thumb"><img src="${e.rhythmPhoto}" alt="Rhythm strip"><button type="button" class="photo-thumb-remove" onclick="removeFlightRhythmPhoto('${e.id}')" title="Remove">×</button></div></div>` : ''}
         <div id="rhythmOut_${e.id}" class="ai-out ${e.rhythmInterp ? 'show' : ''}">${e.rhythmInterp ? '<strong>Rhythm interpretation</strong><br>' + formatAiText(e.rhythmInterp) : ''}</div>
         <div class="sub-h">Ventilator settings</div>
         <div class="row-4">
@@ -5128,6 +5160,8 @@ Guidance: weave in the vital signs, the oxygen/airway delivery device and flow, 
     const status = document.getElementById('rhythmStatus_' + id);
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Interpreting…'; }
     if (status) { status.textContent = ''; status.style.color = ''; }
+    // Keep a compressed copy of the strip on the entry as QI / medical-legal proof
+    try { e.rhythmPhoto = await compressDataUrlForStorage(await readFileAsDataUrl(file)); } catch (e2) { /* keep going even if storage copy fails */ }
     try {
       const text = await callClaudeVisionMulti(EKG_INTERP_PROMPT, [file]);
       const clean = String(text || '').trim();
@@ -5137,10 +5171,12 @@ Guidance: weave in the vital signs, the oxygen/airway delivery device and flow, 
       if (m) { e.vitals = e.vitals || {}; e.vitals.rhythm = m[1].trim(); }
       renderFlightEntries();
     } catch (err) {
-      if (status) { status.textContent = 'Failed: ' + (err.message || err); status.style.color = '#991b1b'; }
-      if (btn) { btn.disabled = false; btn.innerHTML = '🫀 Interpret rhythm strip (photo)'; }
+      // The strip image was already saved to the entry; re-render so it still shows as proof.
+      renderFlightEntries();
+      alert('Rhythm interpretation failed (the strip photo was still saved to this entry): ' + (err.message || err));
     }
   }
+  function removeFlightRhythmPhoto(id){ const e = flightById(id); if (e) { delete e.rhythmPhoto; renderFlightEntries(); } }
   async function combineFlightNarrative(){
     const settings = loadSettings();
     if (!settings.anthropic) { alert('Anthropic API key required. Open Settings to add one.'); openSettings(); return; }
@@ -6244,6 +6280,7 @@ ${JSON.stringify(data, null, 2)}`;
       vitalsTrend: (typeof gatherVitalsTrend === 'function') ? gatherVitalsTrend() : [],
       inflightLog: (typeof inflightLogData !== 'undefined') ? inflightLogData.slice() : [],
       dx: dxSelected.slice(),
+      ekgPhotos: (typeof ekgPhotoDataUrls !== 'undefined') ? ekgPhotoDataUrls.slice() : [],
       outputs: { narrative: out('narrativeOut'), template: out('templateOut'), cct: out('cctOut'), combined: out('combinedOut'), camts11: out('camts11Out') },
     };
   }
@@ -6303,6 +6340,7 @@ ${JSON.stringify(data, null, 2)}`;
         if (typeof renderInflightLog === 'function') renderInflightLog();
       }
       dxSelected.length = 0; (s.dx || []).forEach(x => dxSelected.push(x)); renderDxChips();
+      if (typeof ekgPhotoDataUrls !== 'undefined') { ekgPhotoDataUrls = (s.ekgPhotos || []).slice(); if (typeof renderEkgPreview === 'function') renderEkgPreview(); }
       const setOut = (id, o) => { const el = $(id); if (el && o) { el.textContent = o.text; el.classList.toggle('polished', !!o.polished); } };
       if (s.outputs) {
         setOut('narrativeOut', s.outputs.narrative); setOut('templateOut', s.outputs.template);
@@ -6383,13 +6421,29 @@ ${JSON.stringify(data, null, 2)}`;
     const s = loadSettings();
     if (!s.sharedLogUrl) { if (manual) { alert('Set the shared log URL in Settings first.'); openSettings(); } return false; }
     if (!rec.loggedBy) rec.loggedBy = val('flightRN') || val('flightMedic') || val('pilot') || '';
-    const payload = { token: s.sharedLogToken, action: 'log', record: rec };
+    // Strip embedded image data URLs (EKG / rhythm strips) before sending to the shared
+    // Google Sheet — base64 images would exceed the ~50k-char cell limit and break logging.
+    // The images remain in the locally-saved record and the printed report for QI / legal.
+    const payload = { token: s.sharedLogToken, action: 'log', record: stripImagesForLog(rec) };
     try {
       fetch(s.sharedLogUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
         .then(() => setAutosaveStatus('Logged to shared sheet ✓ ' + fmtTime(new Date())))
         .catch(() => setAutosaveStatus('Shared-sheet log failed (saved locally)'));
       return true;
     } catch (e) { return false; }
+  }
+  // Deep-clone a record and remove embedded image data URLs so the shared-log payload stays small.
+  function stripImagesForLog(rec){
+    let clone;
+    try { clone = JSON.parse(JSON.stringify(rec)); } catch (e) { return rec; }
+    const st = clone.state;
+    if (st) {
+      if (Array.isArray(st.ekgPhotos)) { st.ekgPhotoCount = st.ekgPhotos.length; delete st.ekgPhotos; }
+      if (Array.isArray(st.flight)) {
+        st.flight.forEach(e => { if (e && e.rhythmPhoto) { e.rhythmPhotoStored = true; delete e.rhythmPhoto; } });
+      }
+    }
+    return clone;
   }
   function pushToSharedLog(rec){
     if (!loadSettings().sharedLog) return; // auto-log off — manual still works
@@ -7576,6 +7630,22 @@ ${transcript}`;
         });
         html += '</div>';
       }
+    }
+
+    // In-Flight Rhythm Strips — interpretation + the actual strip image (QI / medical-legal proof)
+    const rhythmEntries = (Array.isArray(d.flightTimeline) ? d.flightTimeline : []).filter(e => e && (e.rhythmPhoto || e.rhythmInterp));
+    if (rhythmEntries.length) {
+      html += '<h2>In-Flight Rhythm Strips</h2>';
+      rhythmEntries.forEach(e => {
+        const t = e.time ? escapeHtml(e.time) : '';
+        if (t) html += `<p><b>Time:</b> ${t}</p>`;
+        if (e.rhythmInterp) html += paragraphize(e.rhythmInterp);
+        if (e.rhythmPhoto) {
+          html += '<div class="license-extras">';
+          html += `<div class="patient-photo"><img src="${e.rhythmPhoto}" alt="In-flight rhythm strip${t ? ' ' + t : ''}"><div class="photo-caption">In-flight rhythm strip${t ? ' @ ' + t : ''}</div></div>`;
+          html += '</div>';
+        }
+      });
     }
 
     // Labs — free-text paragraphs, then structured table as a separate block
