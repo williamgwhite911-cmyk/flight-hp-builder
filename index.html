@@ -252,6 +252,20 @@
   }
   .add-allergy-btn:hover { background: #b91c1c; }
   .add-allergy-btn:active { transform: translateY(1px); }
+  /* Allergy section header badge + live "on chart" summary */
+  .sec-badge {
+    display: none; font-size: 11px; font-weight: 800; letter-spacing: 0.3px;
+    border-radius: 999px; padding: 1px 9px; margin-left: 6px; vertical-align: middle;
+  }
+  .sec-badge.show { display: inline-block; }
+  .sec-badge.alert { background: #dc2626; color: #fff; }
+  .sec-badge.ok { background: #16a34a; color: #fff; }
+  .sec-badge.warn { background: #f59e0b; color: #fff; }
+  .allergy-chart-summary { display: none; margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; }
+  .allergy-chart-summary.show { display: block; }
+  .allergy-chart-summary.alert { background: #fef2f2; border: 1.5px solid #dc2626; color: #991b1b; }
+  .allergy-chart-summary.ok { background: #f0fdf4; border: 1.5px solid #16a34a; color: #166534; }
+  .allergy-chart-summary.warn { background: #fffbeb; border: 1.5px solid #f59e0b; color: #92400e; }
 
   /* Dictation (Web Speech API) — listening state */
   .add-btn.dictating { background: #dc2626; color: #fff; border-color: #dc2626; border-style: solid; animation: dictatePulse 1.1s ease-in-out infinite; }
@@ -1158,13 +1172,14 @@
 
     <fieldset>
       <details open>
-        <summary>Allergies</summary>
+        <summary>Allergies <span id="allergyBadge" class="sec-badge"></span></summary>
         <div class="fieldset-body">
+          <div id="allergyChartSummary" class="allergy-chart-summary"></div>
           <label>Allergy status</label>
           <div class="toggle-group">
-            <label><input type="radio" name="allergyStatus" value="has" checked><span>Has allergies</span></label>
-            <label><input type="radio" name="allergyStatus" value="nkda"><span>NKDA (drugs)</span></label>
-            <label><input type="radio" name="allergyStatus" value="nka"><span>NKA (all)</span></label>
+            <label><input type="radio" name="allergyStatus" value="has" checked onchange="updateAllergySummary()"><span>Has allergies</span></label>
+            <label><input type="radio" name="allergyStatus" value="nkda" onchange="updateAllergySummary()"><span>NKDA (drugs)</span></label>
+            <label><input type="radio" name="allergyStatus" value="nka" onchange="updateAllergySummary()"><span>NKA (all)</span></label>
           </div>
           <div id="allergyList"></div>
           <button type="button" class="add-allergy-btn" onclick="addAllergyRow()">➕ Add Allergy</button>
@@ -4924,8 +4939,11 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
         <input type="text" class="alg-rxn" placeholder="Reaction (hives, anaphylaxis, GI…)" value="${attrEsc(data.reaction)}">
         <button class="remove-btn" type="button" title="Remove">×</button>
       </div>`;
-    wrap.querySelector('.remove-btn').addEventListener('click', () => wrap.remove());
+    wrap.querySelector('.remove-btn').addEventListener('click', () => { wrap.remove(); if (typeof updateAllergySummary === 'function') updateAllergySummary(); });
+    // Update the on-chart summary as the allergen/reaction are typed or picked
+    wrap.querySelectorAll('input, select').forEach(el => el.addEventListener('input', () => { if (typeof updateAllergySummary === 'function') updateAllergySummary(); }));
     $('allergyList').appendChild(wrap);
+    if (typeof updateAllergySummary === 'function') updateAllergySummary();
     // Remove the one-shot flash class after the animation so restored rows don't re-flash
     setTimeout(() => wrap.classList.remove('just-added'), 1300);
   }
@@ -5371,8 +5389,37 @@ Be specific to the numbers. Do not invent values. End with: "Clinical judgment a
       '</ul>';
   }
   let allergyCheckTimer = null;
-  function checkAllergyConflicts(){ const c = computeAllergyConflicts(); renderAllergyAlert(c); return c; }
+  function checkAllergyConflicts(){ const c = computeAllergyConflicts(); renderAllergyAlert(c); updateAllergySummary(); return c; }
   function scheduleAllergyCheck(){ clearTimeout(allergyCheckTimer); allergyCheckTimer = setTimeout(checkAllergyConflicts, 350); }
+  // Live confirmation of what allergy info is captured on the chart.
+  function updateAllergySummary(){
+    const box = $('allergyChartSummary'), badge = $('allergyBadge');
+    if (!box) return;
+    const alg = (typeof gatherAllergies === 'function') ? gatherAllergies() : { status: 'has', items: [], freeText: '' };
+    const setCls = (el, cls) => { if (el) el.className = el.id === 'allergyBadge' ? ('sec-badge show ' + cls) : ('allergy-chart-summary show ' + cls); };
+    if (alg.status === 'nkda') {
+      box.textContent = '✓ NKDA documented on chart — No Known Drug Allergies.'; setCls(box, 'ok');
+      if (badge) { badge.textContent = 'NKDA'; setCls(badge, 'ok'); }
+      return;
+    }
+    if (alg.status === 'nka') {
+      box.textContent = '✓ NKA documented on chart — No Known Allergies.'; setCls(box, 'ok');
+      if (badge) { badge.textContent = 'NKA'; setCls(badge, 'ok'); }
+      return;
+    }
+    const items = (Array.isArray(alg.items) ? alg.items : []).filter(a => a.allergen);
+    const freeItems = parseFreeTextAllergens(alg.freeText);
+    const all = items.concat(freeItems);
+    if (!all.length) {
+      box.textContent = '⚠ No allergies on chart yet — add an allergy, or select NKDA / NKA.'; setCls(box, 'warn');
+      if (badge) { badge.textContent = '0'; setCls(badge, 'warn'); }
+      return;
+    }
+    const list = all.map(a => a.allergen + (a.reaction ? ' (' + a.reaction + ')' : '')).join(' · ');
+    box.textContent = '⚠ ' + all.length + ' allerg' + (all.length === 1 ? 'y' : 'ies') + ' ON CHART: ' + list;
+    setCls(box, 'alert');
+    if (badge) { badge.textContent = '⚠ ' + all.length; setCls(badge, 'alert'); }
+  }
 
   // ====== IV Push Medications ======
   const PUSH_MED_GROUPS = {
