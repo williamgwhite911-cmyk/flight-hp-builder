@@ -2586,12 +2586,18 @@
     </div>
 
     <h3>Anthropic API Key</h3>
-    <input type="password" id="anthropicKey" placeholder="sk-ant-...">
+    <div class="input-clear-row">
+      <input type="password" id="anthropicKey" placeholder="sk-ant-...">
+      <button type="button" class="clear-btn" onclick="toggleKeyVisibility('anthropicKey', this)" title="Show / hide">👁</button>
+    </div>
     <div class="hint">For AI generation. Get a key at console.anthropic.com.</div>
 
     <h3>Google Maps API Key (optional)</h3>
-    <input type="password" id="googleKey" placeholder="AIza...">
-    <div class="hint">For distance, ground ETA &amp; the route map. Enable <b>Routes API</b>, <b>Geocoding API</b>, and <b>Maps Embed API</b> on the key. Manual entry works without it.</div>
+    <div class="input-clear-row">
+      <input type="password" id="googleKey" placeholder="AIza...">
+      <button type="button" class="clear-btn" onclick="toggleKeyVisibility('googleKey', this)" title="Show / hide">👁</button>
+    </div>
+    <div class="hint">For distance, ground ETA &amp; the route map. Enable <b>Routes API</b>, <b>Geocoding API</b>, and <b>Maps Embed API</b> on the key. Manual entry works without it. Tap 👁 to reveal the saved key (e.g., to copy it to another device).</div>
     <button type="button" class="calc-btn" onclick="testGoogleKey()" style="margin-top:6px">🔧 Test Google Maps key</button>
     <div id="googleKeyTestOut" class="hint" style="white-space:pre-line;margin-top:4px"></div>
 
@@ -3174,6 +3180,12 @@ Read height, weight, the license number, and the expiration date even when shown
     $('settingsModal').classList.add('show');
   }
   function closeSettings(){ $('settingsModal').classList.remove('show'); }
+  function toggleKeyVisibility(id, btn){
+    const el = $(id);
+    const show = el.type === 'password';
+    el.type = show ? 'text' : 'password';
+    btn.textContent = show ? '🙈' : '👁';
+  }
   function saveSettings(){
     localStorage.setItem('hp_anthropic_key', $('anthropicKey').value.trim());
     localStorage.setItem('hp_google_key', $('googleKey').value.trim());
