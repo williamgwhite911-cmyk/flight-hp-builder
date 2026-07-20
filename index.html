@@ -2577,7 +2577,7 @@
 <datalist id="homeMedList"></datalist>
 
 <!-- Settings Modal -->
-<div class="modal-backdrop" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+<div class="modal-backdrop" id="settingsModal" onclick="if(event.target===this)saveSettings()">
   <div class="modal">
     <h2>⚙ Settings</h2>
     <p style="font-size:13px;color:#475569;margin:6px 0 0;">API keys for AI generation and distance calculation. Stored locally on this device only.</p>
@@ -3824,15 +3824,15 @@ ${JSON.stringify({
   async function calcDistance(){
     const settings = loadSettings();
     if (!settings.google) {
-      setStatus('Google Maps API key required. Add in Settings, or enter values manually.', true);
+      setStatus('Google Maps API key required — paste it in the highlighted field, then tap Save.', true);
       openSettings();
+      const gk = $('googleKey');
+      if (gk) { gk.focus(); gk.scrollIntoView({ block: 'center' }); }
+      const gout = $('googleKeyTestOut');
+      if (gout) { gout.style.color = '#b91c1c'; gout.textContent = 'No Google Maps key is saved on this device yet. Paste your key above, tap Save, then use 🔧 Test Google Maps key.'; }
       return;
     }
-    if (!/^AIza[0-9A-Za-z_-]{35}$/.test(settings.google)) {
-      setStatus(`Google Maps key looks malformed (${settings.google.length} characters — a real key is exactly 39 and starts with "AIza"). Open Settings and use 🔧 Test Google Maps key.`, true);
-      openSettings();
-      return;
-    }
+    const keyLooksOff = !/^AIza[0-9A-Za-z_-]{35}$/.test(settings.google);
     const mode = document.querySelector('input[name=callType]:checked').value;
     let origin, destination;
     if (mode === 'ift') {
@@ -3877,7 +3877,9 @@ ${JSON.stringify({
     } catch (err) {
       const msg = err.message || String(err);
       let hint = '';
-      if (/REQUEST_DENIED|PERMISSION_DENIED|API key not valid/i.test(msg))
+      if (keyLooksOff)
+        hint = ` — Note: the saved key is ${settings.google.length} characters; a Google Maps key is normally 39 characters starting with "AIza". Open Settings and use 🔧 Test Google Maps key.`;
+      else if (/REQUEST_DENIED|PERMISSION_DENIED|API key not valid/i.test(msg))
         hint = ' — Check the API key is correct, that "Routes API" and "Geocoding API" are both enabled, and that the key allows them.';
       else if (/OVER_QUERY_LIMIT|RESOURCE_EXHAUSTED|quota/i.test(msg))
         hint = ' — Quota / billing issue. Confirm billing is active on the Google Cloud project.';
