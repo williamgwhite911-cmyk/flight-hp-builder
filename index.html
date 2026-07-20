@@ -2592,6 +2592,8 @@
     <h3>Google Maps API Key (optional)</h3>
     <input type="password" id="googleKey" placeholder="AIza...">
     <div class="hint">For distance, ground ETA &amp; the route map. Enable <b>Routes API</b>, <b>Geocoding API</b>, and <b>Maps Embed API</b> on the key. Manual entry works without it.</div>
+    <button type="button" class="calc-btn" onclick="testGoogleKey()" style="margin-top:6px">🔧 Test Google Maps key</button>
+    <div id="googleKeyTestOut" class="hint" style="white-space:pre-line;margin-top:4px"></div>
 
     <h3>Model</h3>
     <select id="modelSelect">
@@ -3782,10 +3784,52 @@ ${JSON.stringify({
     };
   }
 
+  async function testGoogleKey(){
+    const out = $('googleKeyTestOut');
+    const key = $('googleKey').value.trim();
+    out.style.color = '';
+    if (!key) { out.style.color = '#b91c1c'; out.textContent = 'No key entered.'; return; }
+    const lines = [];
+    if (!/^AIza[0-9A-Za-z_-]{35}$/.test(key)) {
+      lines.push(`⚠ This does not look like a Google Maps API key (yours is ${key.length} characters; a real key is exactly 39 characters and starts with "AIza"). Re-copy just the key from console.cloud.google.com → APIs & Services → Credentials.`);
+    }
+    out.textContent = 'Testing…';
+    try {
+      const r = await fetch(`${GEOCODE_URL}?address=${encodeURIComponent('Key West, FL')}&key=${encodeURIComponent(key)}`);
+      const d = await r.json();
+      if (d.status === 'OK') lines.push('✅ Geocoding API: working.');
+      else lines.push(`❌ Geocoding API: ${d.status}${d.error_message ? ' — ' + d.error_message : ''}`);
+    } catch (e) { lines.push('❌ Geocoding API: network error — ' + e.message); }
+    try {
+      const r = await fetch(`${ROUTES_MATRIX_URL}?key=${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Goog-FieldMask': 'originIndex,duration,distanceMeters,condition' },
+        body: JSON.stringify({ origins: [{ waypoint: { address: 'Key West, FL' } }], destinations: [{ waypoint: { address: 'Miami, FL' } }], travelMode: 'DRIVE', units: 'IMPERIAL' }),
+      });
+      if (r.ok) lines.push('✅ Routes API: working.');
+      else {
+        const t = await r.text();
+        let msg = '';
+        try { const j = JSON.parse(t); msg = (Array.isArray(j) ? j[0] : j).error.message; } catch (_) { msg = t.slice(0, 160); }
+        lines.push(`❌ Routes API: HTTP ${r.status} — ${msg}`);
+      }
+    } catch (e) { lines.push('❌ Routes API: network error — ' + e.message); }
+    if (lines.some(l => l.startsWith('❌'))) {
+      lines.push('Fixes: (1) re-copy the key exactly; (2) in Google Cloud Console enable "Geocoding API" and "Routes API" on the key’s project; (3) if the key has website restrictions, add https://williamgwhite911-cmyk.github.io/* ; (4) confirm billing is active on the project.');
+    }
+    out.style.color = lines.some(l => l.startsWith('❌') || l.startsWith('⚠')) ? '#b91c1c' : '#15803d';
+    out.textContent = lines.join('\n');
+  }
+
   async function calcDistance(){
     const settings = loadSettings();
     if (!settings.google) {
       setStatus('Google Maps API key required. Add in Settings, or enter values manually.', true);
+      openSettings();
+      return;
+    }
+    if (!/^AIza[0-9A-Za-z_-]{35}$/.test(settings.google)) {
+      setStatus(`Google Maps key looks malformed (${settings.google.length} characters — a real key is exactly 39 and starts with "AIza"). Open Settings and use 🔧 Test Google Maps key.`, true);
       openSettings();
       return;
     }
