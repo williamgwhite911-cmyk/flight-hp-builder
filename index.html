@@ -3873,6 +3873,7 @@ ${JSON.stringify({
       updateRouteMap(origin, destination, lat1, lng1, lat2, lng2);
       setStatus('Distances calculated.');
       setTimeout(() => setStatus(''), 2000);
+      if (typeof scheduleAutosave === 'function') scheduleAutosave();
     } catch (err) {
       const msg = err.message || String(err);
       let hint = '';
@@ -4005,6 +4006,7 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
         const cur = $('bypass').value.trim();
         $('bypass').value = cur && !cur.includes(just) ? cur + '\n\n' + just : just;
       }
+      if (typeof scheduleAutosave === 'function') scheduleAutosave();
     } catch (err) {
       out.innerHTML = 'Analysis failed: ' + escapeHtml(err.message || String(err));
     } finally {
@@ -6233,6 +6235,7 @@ ${JSON.stringify(data, null, 2)}`;
       btn.innerHTML = '✨ Regenerate';
       setStatus('Generated.');
       setTimeout(() => setStatus(''), 2000);
+      if (typeof scheduleAutosave === 'function') scheduleAutosave();
     } catch (err) {
       btn.disabled = false;
       btn.innerHTML = '✨ Generate H&P with AI';
@@ -7375,6 +7378,9 @@ ${JSON.stringify(data, null, 2)}`;
   function initSaveSystem(){
     document.addEventListener('input', scheduleAutosave, true);
     document.addEventListener('change', scheduleAutosave, true);
+    // Safety net: programmatic field writes (distance calc, AI auto-fill, generated
+    // outputs) fire no input events, so also autosave on a timer.
+    setInterval(() => { if (!suppressAutosave) doAutosave(); }, 30000);
     document.addEventListener('input', scheduleAllergyCheck, true);
     document.addEventListener('change', scheduleAllergyCheck, true);
     updateRecordsBtn();
@@ -7959,6 +7965,7 @@ ${transcript}`;
 
     autoFillHospAddr('send');
     autoFillHospAddr('recv');
+    if (typeof scheduleAutosave === 'function') scheduleAutosave();
   }
 
   // First run check
