@@ -272,6 +272,11 @@
   @keyframes dictatePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.45); } 50% { box-shadow: 0 0 0 6px rgba(220,38,38,0); } }
 
   /* Mode display */
+  #sectionNav { position: sticky; top: 6px; z-index: 60; display: flex; gap: 6px; margin: 10px 0;
+    background: rgba(241,245,249,.96); padding: 6px; border-radius: 10px; box-shadow: 0 2px 8px rgba(15,23,42,.08); }
+  #sectionNav select { flex: 1; min-width: 0; font-size: 13px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+  #sectionNav button { font-size: 12px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0c4a6e; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  summary .sec-check { color: #15803d; font-weight: 700; margin-left: 6px; }
   .scene-only { display: none; }
   .ift-only { display: none; }
   body.mode-scene .scene-only { display: block; }
@@ -1010,6 +1015,12 @@
       </div>
     </fieldset>
 
+    <div id="sectionNav">
+      <select id="jumpSelect" onchange="jumpToSection(this)"><option value="">🧭 Jump to section…</option></select>
+      <button type="button" onclick="collapseFilled()" title="Collapse every section that already has data (✓)">▾ Collapse ✓</button>
+      <button type="button" onclick="expandAllSections()" title="Open all sections">▸ All</button>
+    </div>
+
     <fieldset>
       <details>
         <summary>📋 Transcript / Voice Memo / Report (AI Auto-Fill)</summary>
@@ -1027,7 +1038,7 @@
       </details>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="ift-only">
       <details>
         <summary>📑 Hospital Paperwork Bulk Upload (PDF / JPG, up to ~30 pages)</summary>
         <div class="fieldset-body">
@@ -1202,7 +1213,7 @@
           </div>
           <label>Sending Hospital Address (editable)</label>
           <div class="input-clear-row">
-            <input type="text" id="sendHospAddr" placeholder="1104 E Grace St, Rensselaer IN 47978">
+            <input type="text" id="sendHospAddr" placeholder="5900 College Rd, Key West, FL 33040">
             <button type="button" class="clear-btn" onclick="$('sendHospAddr').value=''" title="Clear">✕</button>
           </div>
           <label>Department / Unit &amp; Bed</label>
@@ -1478,7 +1489,7 @@
       </details>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="ift-only">
       <details>
         <summary>Diagnostics PTA — Imaging</summary>
         <div class="fieldset-body">
@@ -1526,7 +1537,7 @@
       </details>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="ift-only">
       <details>
         <summary>Diagnostics PTA — Labs</summary>
         <div class="fieldset-body">
@@ -2439,138 +2450,40 @@
   <option value="LAMS score documented; LVO concern">
 </datalist>
 
-<!-- Indiana Counties datalist (for scene county field) -->
+<!-- Florida Counties datalist (for scene county field) -->
 <datalist id="countyList">
-  <option value="Adams County"><option value="Allen County"><option value="Bartholomew County">
-  <option value="Benton County"><option value="Blackford County"><option value="Boone County">
-  <option value="Brown County"><option value="Carroll County"><option value="Cass County">
-  <option value="Clark County"><option value="Clay County"><option value="Clinton County">
-  <option value="Crawford County"><option value="Daviess County"><option value="Dearborn County">
-  <option value="Decatur County"><option value="DeKalb County"><option value="Delaware County">
-  <option value="Dubois County"><option value="Elkhart County"><option value="Fayette County">
-  <option value="Floyd County"><option value="Fountain County"><option value="Franklin County">
-  <option value="Fulton County"><option value="Gibson County"><option value="Grant County">
-  <option value="Greene County"><option value="Hamilton County"><option value="Hancock County">
-  <option value="Harrison County"><option value="Hendricks County"><option value="Henry County">
-  <option value="Howard County"><option value="Huntington County"><option value="Jackson County">
-  <option value="Jasper County"><option value="Jay County"><option value="Jefferson County">
-  <option value="Jennings County"><option value="Johnson County"><option value="Knox County">
-  <option value="Kosciusko County"><option value="LaGrange County"><option value="Lake County">
-  <option value="LaPorte County"><option value="Lawrence County"><option value="Madison County">
-  <option value="Marion County"><option value="Marshall County"><option value="Martin County">
-  <option value="Miami County"><option value="Monroe County"><option value="Montgomery County">
-  <option value="Morgan County"><option value="Newton County"><option value="Noble County">
-  <option value="Ohio County"><option value="Orange County"><option value="Owen County">
-  <option value="Parke County"><option value="Perry County"><option value="Pike County">
-  <option value="Porter County"><option value="Posey County"><option value="Pulaski County">
-  <option value="Putnam County"><option value="Randolph County"><option value="Ripley County">
-  <option value="Rush County"><option value="Scott County"><option value="Shelby County">
-  <option value="Spencer County"><option value="Starke County"><option value="Steuben County">
-  <option value="St. Joseph County"><option value="Sullivan County"><option value="Switzerland County">
-  <option value="Tippecanoe County"><option value="Tipton County"><option value="Union County">
-  <option value="Vanderburgh County"><option value="Vermillion County"><option value="Vigo County">
-  <option value="Wabash County"><option value="Warren County"><option value="Warrick County">
-  <option value="Washington County"><option value="Wayne County"><option value="Wells County">
-  <option value="White County"><option value="Whitley County">
+  <option value="Monroe County"><option value="Miami-Dade County"><option value="Broward County">
+  <option value="Palm Beach County"><option value="Collier County"><option value="Lee County">
+  <option value="Hendry County">
 </datalist>
 
-<!-- Indiana Counties (EMS) datalist -->
+<!-- Florida Keys / South Florida EMS agencies datalist -->
 <datalist id="emsList">
-  <option value="Adams County EMS">
-  <option value="Allen County EMS / Three Rivers Ambulance Authority">
-  <option value="Bartholomew County EMS">
-  <option value="Benton County EMS">
-  <option value="Blackford County EMS">
-  <option value="Boone County EMS">
-  <option value="Brown County EMS">
-  <option value="Carroll County EMS">
-  <option value="Cass County EMS">
-  <option value="Clark County EMS">
-  <option value="Clay County EMS">
-  <option value="Clinton County EMS">
-  <option value="Crawford County EMS">
-  <option value="Daviess County EMS">
-  <option value="Dearborn County EMS">
-  <option value="Decatur County EMS">
-  <option value="DeKalb County EMS">
-  <option value="Delaware County EMS">
-  <option value="Dubois County EMS">
-  <option value="Elkhart County EMS">
-  <option value="Fayette County EMS">
-  <option value="Floyd County EMS">
-  <option value="Fountain County EMS">
-  <option value="Franklin County EMS">
-  <option value="Fulton County EMS">
-  <option value="Gibson County EMS">
-  <option value="Grant County EMS">
-  <option value="Greene County EMS">
-  <option value="Hamilton County EMS">
-  <option value="Hancock County EMS">
-  <option value="Harrison County EMS">
-  <option value="Hendricks County EMS">
-  <option value="Henry County EMS">
-  <option value="Howard County EMS">
-  <option value="Huntington County EMS">
-  <option value="Jackson County EMS">
-  <option value="Jasper County EMS">
-  <option value="Jay County EMS">
-  <option value="Jefferson County EMS">
-  <option value="Jennings County EMS">
-  <option value="Johnson County EMS">
-  <option value="Knox County EMS">
-  <option value="Kosciusko County EMS">
-  <option value="LaGrange County EMS">
-  <option value="Lake County EMS">
-  <option value="LaPorte County EMS">
-  <option value="Lawrence County EMS">
-  <option value="Madison County EMS">
-  <option value="Marion County / Indianapolis EMS">
-  <option value="Marshall County EMS">
-  <option value="Martin County EMS">
-  <option value="Miami County EMS">
-  <option value="Monroe County EMS">
-  <option value="Montgomery County EMS">
-  <option value="Morgan County EMS">
-  <option value="Newton County EMS">
-  <option value="Noble County EMS">
-  <option value="Ohio County EMS">
-  <option value="Orange County EMS">
-  <option value="Owen County EMS">
-  <option value="Parke County EMS">
-  <option value="Perry County EMS">
-  <option value="Pike County EMS">
-  <option value="Porter County EMS">
-  <option value="Posey County EMS">
-  <option value="Pulaski County EMS">
-  <option value="Putnam County EMS">
-  <option value="Randolph County EMS">
-  <option value="Ripley County EMS">
-  <option value="Rush County EMS">
-  <option value="Scott County EMS">
-  <option value="Shelby County EMS">
-  <option value="Spencer County EMS">
-  <option value="Starke County EMS">
-  <option value="Steuben County EMS">
-  <option value="St. Joseph County EMS">
-  <option value="Sullivan County EMS">
-  <option value="Switzerland County EMS">
-  <option value="Tippecanoe County EMS">
-  <option value="Tipton County EMS">
-  <option value="Union County EMS">
-  <option value="Vanderburgh County EMS">
-  <option value="Vermillion County EMS">
-  <option value="Vigo County EMS">
-  <option value="Wabash County EMS">
-  <option value="Warren County EMS">
-  <option value="Warrick County EMS">
-  <option value="Washington County EMS">
-  <option value="Wayne County EMS">
-  <option value="Wells County EMS">
-  <option value="White County EMS">
-  <option value="Whitley County EMS">
-  <option value="Indianapolis Fire Department EMS">
-  <option value="Indianapolis Metropolitan Police / EMS">
-  <option value="Wishard / Eskenazi EMS">
+  <option value="Monroe County Fire Rescue">
+  <option value="Key West Fire Department">
+  <option value="Naval Air Station Key West Fire & Emergency Services">
+  <option value="Islamorada Fire Rescue">
+  <option value="Key Largo Fire Rescue & EMS">
+  <option value="Key Largo Volunteer Ambulance Corps">
+  <option value="City of Marathon Fire Rescue">
+  <option value="Ocean Reef Public Safety Department">
+  <option value="Layton Volunteer Fire Department">
+  <option value="Monroe County Sheriff's Office">
+  <option value="U.S. Coast Guard Sector Key West">
+  <option value="U.S. Navy / Military EMS">
+  <option value="Florida Keys Mosquito Control / Air Support">
+  <option value="Miami-Dade Fire Rescue">
+  <option value="City of Miami Fire-Rescue">
+  <option value="Hialeah Fire Department">
+  <option value="Coral Gables Fire Rescue">
+  <option value="Broward Sheriff Fire Rescue">
+  <option value="Fort Lauderdale Fire Rescue">
+  <option value="Palm Beach County Fire Rescue">
+  <option value="Collier County EMS">
+  <option value="Naples Fire-Rescue">
+  <option value="Lee County EMS">
+  <option value="American Medical Response (AMR)">
+  <option value="Florida Highway Patrol">
   <option value="Other / Custom (type below)">
 </datalist>
 
@@ -3233,6 +3146,63 @@ Read height, weight, the license number, and the expiration date even when shown
       document.body.className = 'mode-' + mode;
     });
   });
+
+  // ====== Section navigator (jump, completion checkmarks, collapse) ======
+  function initSectionNav(){
+    const sel = $('jumpSelect');
+    if (!sel) return;
+    let n = 0;
+    document.querySelectorAll('.form fieldset').forEach(fs => {
+      const sum = fs.querySelector('details > summary');
+      if (!sum) return;
+      if (!fs.id) fs.id = 'sec-' + (n++);
+      const opt = document.createElement('option');
+      opt.value = fs.id;
+      opt.textContent = sum.textContent.replace(/\s+/g, ' ').trim();
+      sel.appendChild(opt);
+    });
+  }
+  function jumpToSection(sel){
+    const fs = document.getElementById(sel.value);
+    sel.value = '';
+    if (!fs) return;
+    const det = fs.querySelector('details');
+    if (det) det.open = true;
+    fs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function sectionHasData(fs){
+    for (const el of fs.querySelectorAll('input, select, textarea')) {
+      if (el.type === 'file' || el.type === 'button' || el.type === 'radio') continue;
+      if (el.type === 'checkbox') { if (el.checked && el.classList.contains('ts-flag')) return true; continue; }
+      if (el.value && String(el.value).trim()) return true;
+    }
+    return !!fs.querySelector('.multi-row, .allergy-entry');
+  }
+  function updateSectionMarks(){
+    document.querySelectorAll('.form fieldset').forEach(fs => {
+      const sum = fs.querySelector('details > summary');
+      if (!sum) return;
+      const chk = sum.querySelector('.sec-check');
+      if (sectionHasData(fs)) {
+        if (!chk) { const s = document.createElement('span'); s.className = 'sec-check'; s.textContent = '✓'; sum.appendChild(s); }
+      } else if (chk) chk.remove();
+    });
+  }
+  let sectionMarkTimer = null;
+  function scheduleSectionMarks(){ clearTimeout(sectionMarkTimer); sectionMarkTimer = setTimeout(updateSectionMarks, 400); }
+  function collapseFilled(){
+    document.querySelectorAll('.form fieldset').forEach(fs => {
+      const det = fs.querySelector('details');
+      const sum = fs.querySelector('details > summary');
+      if (det && sum && sum.querySelector('.sec-check')) det.open = false;
+    });
+  }
+  function expandAllSections(){ document.querySelectorAll('.form fieldset details').forEach(d => { d.open = true; }); }
+  initSectionNav();
+  updateSectionMarks();
+  document.addEventListener('input', scheduleSectionMarks, true);
+  document.addEventListener('change', scheduleSectionMarks, true);
+  setInterval(updateSectionMarks, 15000); // catch programmatic fills (AI auto-fill, restore, calc)
   document.querySelectorAll('input[name=vented]').forEach(r => {
     r.addEventListener('change', () => {
       const isYes = document.querySelector('input[name=vented]:checked').value === 'yes';
@@ -6994,6 +6964,7 @@ ${JSON.stringify(data, null, 2)}`;
       if (typeof checkCuff === 'function') checkCuff();
       if (typeof updateHeightConv === 'function') updateHeightConv();
       if (typeof updateWeightConv === 'function') updateWeightConv();
+      if (typeof updateSectionMarks === 'function') updateSectionMarks();
     } finally {
       suppressAutosave = false;
     }
