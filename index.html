@@ -1205,6 +1205,11 @@
             <input type="text" id="sendHospAddr" placeholder="1104 E Grace St, Rensselaer IN 47978">
             <button type="button" class="clear-btn" onclick="$('sendHospAddr').value=''" title="Clear">✕</button>
           </div>
+          <label>Department / Unit &amp; Bed</label>
+          <div class="input-clear-row">
+            <input type="text" id="sendUnitBed" placeholder="e.g., Emergency Department, Bed 7 / ICU Room 4">
+            <button type="button" class="clear-btn" onclick="$('sendUnitBed').value=''" title="Clear">✕</button>
+          </div>
           <label>Sending RN</label>
           <div class="name-cred-row">
             <input type="text" id="sendNurseName" placeholder="Name (e.g., Joshua Kuiper)">
@@ -4033,6 +4038,7 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
       allergies: gatherAllergies(),
       sending: mode === 'ift'
         ? { hospital: val('sendHospName'), address: val('sendHospAddr'),
+            unitBed: val('sendUnitBed'),
             nurse: nameCred('sendNurse'), md: nameCred('sendMD') }
         : { agency: val('sceneAgency'), county: val('sceneCounty'),
             ambulance: val('sceneAmbulance'),
@@ -4090,6 +4096,9 @@ Be specific. Do not invent a facility's capabilities; if unsure, write "verify."
       airReason: val('airReason'),
       belongings: val('belongings'),
       briefed: val('briefed'),
+      loading: { onLoadHot: val('cctHotLoad'), onLoadTime: val('cctHotLoadTime'), onLoadNotes: val('cctHotLoadNotes'),
+                 offLoadHot: val('cctHotOffload'), offLoadTime: val('cctHotOffloadTime'), offLoadNotes: val('cctHotOffloadNotes') },
+      radioReport: val('cctRadio'),
       inflight: inflightLogData.slice(),
     };
   }
@@ -4115,81 +4124,30 @@ OUTPUT 1: A single-paragraph "Reason for Transport / H&P Narrative" that meets A
 
 The narrative should open with: "[Trauma Star unit] was called to [sending facility] by [requesting nurse/requester, with title], with a diagnosis of [primary diagnosis / reason for transport], for [interfacility/scene] transfer of a [age]-year-old [sex] to [receiving facility] in [city, state], accepted by [accepting MD]." Name the sending facility and the specific person who requested the transport. State the diagnosis explicitly using the words "with a diagnosis of". Use the provided flight unit value (e.g., "Trauma Star 1") verbatim.
 
-OUTPUT 2: A "Trauma Star Template" formatted exactly as follows (fill in the blanks; omit any line where data is missing):
+OUTPUT 2: A "Trauma Star Template" — a flowing SIX-PARAGRAPH clinical transport narrative written in past tense, professional critical-care transport language, in full prose (no bullet lists, no headings, no blank fill-in brackets in the final text). Follow this exact paragraph structure, drawing every fact from the data. Omit any sentence whose supporting data is missing; never invent values.
 
-[Trauma Star unit] was requested by [requesting RN/EMS] for the [IFT/scene] transport of a [age]-year-old [sex] patient to [receiving hospital]. The transport was initiated by [requesting MD, credentials] from the [sending facility/agency], and the patient was accepted by [accepting MD, credentials] of the [receiving facility/service] for advanced care.
+PARAGRAPH 1 — Dispatch and reason for transfer. Open with: "[Trauma Star unit] was called to [sending hospital][, sending.unitBed if provided], to transport a [age]-year-old [sex] with [primary diagnosis] requiring [the emergent evaluation/intervention needed]." Then: "Bedside report was received from [sending RN name, credentials], and [sending physician name, credentials]." Follow with an HPI summary in prose: symptom onset and progression, key diagnostic findings (imaging, labs, EKG), and every intervention and medication given prior to the flight crew's arrival with doses and indications ("Prior to the flight crew's arrival, the patient received ..."). Close with: "Due to [services unavailable] at [sending hospital], transfer was arranged to [receiving hospital], where the patient was accepted by [accepting physician name, credentials], [receiving service/specialty]." For scene calls, adapt the opener to the scene location and EMS agency instead of a sending hospital.
 
-[Sending RN/Provider, credentials] gave report to [flight crew, credentials] at the [sending facility]. The patient will be admitted to [receiving unit] upon arrival.
+PARAGRAPH 2 — Flight crew assessment. Begin: "Upon flight crew assessment, the patient was [mental status] with a Glasgow Coma Scale of [gcs]." Describe pupils, lung sounds, and work of breathing. Write vitals out in full sentences: "Blood pressure was [bp] mmHg, heart rate [hr] beats per minute, respiratory rate [rr] breaths per minute, temperature [temp], and oxygen saturation was [spo2]% on [room air or the O2 device]." Include pertinent positive and negative exam findings by system, existing IV access (gauge, site, patency), and allergies woven into prose with type/reaction/source context. If the patient is intubated, describe the ventilator ([ventModel]) mode and settings in prose here, including ETT cuff pressure if documented.
 
-Medical Record Number (MRN): [mrn]
+PARAGRAPH 3 — Packaging and loading. Describe the transfer from bed to flight stretcher (method/mechanics), whether the patient was hot loaded (loading.onLoadHot = "yes" means rotors turning) or cold loaded, and any loading notes. State the patient was secured with all stretcher restraints, the cardiac monitor was applied, baseline vital signs were obtained, and hearing protection was placed. Include the briefing sentence per the MENTAL-STATUS / BRIEFING RULE below (patient and any family briefed on the transport plan and destination, questions answered prior to departure) and the disposition of belongings if documented.
 
-Patient Presentation and Handoff Information
+PARAGRAPH 4 — Medical necessity and mode justification. State why air medical transport was medically necessary: the diagnosis-driven clinical reasons and the specific specialty services unavailable at the referring facility. Then you MUST use the app's distance data exactly as provided (distance.dGround is statute miles; distance.tGround and distance.tAir are minutes — you may re-express minutes as "X hours and Y minutes" but must not change the values): "Ground transport to [receiving hospital] is approximately [distance.dGround] miles with an estimated travel time of [distance.tGround expressed in hours/minutes], whereas air transport reduced transport time to approximately [distance.tAir] minutes, expediting definitive specialty care while minimizing the risk of [diagnosis-specific complications]." Do not estimate or invent mileage or times; use distance.dGround, distance.tGround, and distance.tAir verbatim, and omit the comparison sentence entirely if those fields are empty. If a closer facility was bypassed (bypass), add the rationale here.
 
-The patient presented with [chief complaint summary]. Upon arrival, the patient was [oriented/sedated/etc.], and the Glasgow Coma Scale (GCS) score was [gcs]. A full head-to-toe assessment was performed:
+PARAGRAPH 5 — In-flight course. State that serial reassessments were performed covering neurological status, airway, breathing, circulation, pertinent focused exam, pain, and overall clinical condition. Summarize the in-flight course from flightTimeline, vitalsTrend, and inflight entries with times: stability or changes, any interventions or titrations and the patient's response, and a clinical interpretation of any vital-sign trend supported by the data (do not speculate beyond it). Include the radio report to the receiving facility using the radioReport field (e.g., timing, content, acknowledgment) and whether any additional orders were received.
 
-- Skin: [skin]
-- Pupils: [pupils]
-- Head/Neck: [head/neck]
-- Cardiac: [cardiac]
-- Lungs: [lungs]
-- Abdomen: [abdomen]
-- Extremities: [extremities]
-- Neuro: [neuro]
-- Pain Score: [pain]
-- RASS Score: [rass]
+PARAGRAPH 6 — Arrival and transfer of care. Describe the landing at the receiving facility ("The aircraft landed safely on the [receiving hospital] helipad" or per off-load notes), hot vs cold off-load (loading.offLoadHot), and where transfer of care occurred. Name the receiving nurse: "Transfer of care was completed ... to [handoff RN name, credentials], the patient's receiving nurse." Summarize the comprehensive handover report given (presenting complaint, assessment findings, key clinical events and trends, medications administered, transport course, and ongoing needs). Close with the patient's condition at transfer (handoff.condition), that care was transferred without incident, that all questions from receiving staff were answered, and that the flight crew returned to service.
 
-IV access:
-- [list each IV]
-
-Medications / Drips:
-- [list each med/drip with rate and time]
-- IV push medications: [for each item in pushMeds, list name, dose, route, time, and response/notes]
-- RSI Agents: [rsi or "N/A"]
-- Sedation: [sedation or "N/A"]
-- Other IV meds: [other]
-
-Initial Vital Signs (prior to flight crew arrival):
-- BP: [bp]
-- HR: [hr]
-- RR: [rr]
-- SpO2: [spo2]
-- Temp: [temp]
-- Blood Glucose: [glu]
-
-Ventilator Settings (only include this section if patient is intubated; Hamilton T1 transport ventilator — include only the parameters that have values):
-- Mode: [mode]
-- Tidal Volume (TV): [tv]
-- Rate: [rate]
-- PEEP/CPAP: [peep]
-- FiO2: [fio2]
-- Pressure Support (ΔPsupport): [ps]
-- Pinsp/Pcontrol: [pinsp]
-- I:E ratio: [ie]   Inspiratory time (Ti): [ti]
-- Flow trigger: [trigger]   P-ramp (rise time): [pramp]   ETS: [ets]
-- ASV %MinVol: [asvMinVol]   IBW/PBW: [ibw]   Pmax/limit: [pmax]
-- Measured: Ppeak [ppeak], Pplateau [pplat], Pmean/MAP [map], exhaled MinVol [minVol], VTE [vte], ETCO2 [etco2], Cstat [cstat], Rinsp [rinsp], RCexp [rcexp]
-- ETT cuff pressure: [cuff] cmH2O
-
-Transport Details and Justification
-
-[Patient-briefing sentence phrased to match the patient's mental status per the MENTAL-STATUS / BRIEFING RULE below, incorporating the "briefed" value — do NOT claim the patient was briefed or acknowledged understanding if they are unconscious/sedated/intubated/altered.] Belongings were handed to [belongings]. All drips were transitioned to flight-compatible pumps and the patient was placed on a cardiac monitor. The patient was safely transferred to the stretcher using the sheet method.
-
-Air transport was chosen due to the need for [reason 1], [reason 2], and a significant time savings compared to ground transport.
-
-- Distance to receiving hospital: [ground distance]
-- Estimated ground transport time: [ground time]
-- Actual air transport time: [air time]
-
-The patient's acuity was classified as [acuity] due to [reason matching the diagnosis and time-sensitivity].
+NAMING RULE for OUTPUT 2: Only nurses and physicians/providers may be named (sending RN, sending physician, accepting physician, receiving/handoff RN and physician). Refer to everyone else by role only — "the flight crew", "the flight paramedic", "the pilot" — with no names. Never invent a name; if a name is missing, use the role instead.
 
 CRITICAL INSTRUCTIONS:
 - Use exact times, names, doses, and numbers from the data; do not invent values.
-- If "times.roomEntry" is provided, include it in the narrative as the time the flight crew entered the room/ambulance. If "times.monitorApplied" is provided, note when the cardiac monitor was applied. Mention these in the patient handoff / transport flow section, not in the H&P narrative.
-- Include allergies prominently in the template under a dedicated "Allergies:" line. If "allergies.status" is "nkda", write "NKDA". If "nka", write "NKA". Otherwise list each allergen with type and reaction (e.g., "Penicillin (Medication) — anaphylaxis; Shellfish (Food) — hives"). Also incorporate any "allergies.freeText" notes.
-- If "vitalsTrend" has entries, render them in the template under a "Vital Signs Trend (in-flight):" line as a compact list ordered by time (e.g., "08:42 BP 138/82, HR 92, RR 18, SpO2 96%, EtCO2 35; 08:55 BP 122/74, HR 88, RR 16, SpO2 98%, EtCO2 36"). In the narrative, reference any clinically significant trend (e.g., "BP normalized after fluid resuscitation between 08:42 and 09:10").
+- If "times.roomEntry" is provided, include it in the narrative as the time the flight crew entered the room/ambulance. If "times.monitorApplied" is provided, note when the cardiac monitor was applied. Mention these in the template's packaging/loading paragraph, not in the H&P narrative.
+- Include allergies prominently in the template, woven into the flight crew assessment paragraph as prose. If "allergies.status" is "nkda", state the patient denied any known drug allergies. If "nka", state no known allergies. Otherwise describe each allergen with its type, reaction, and any source context from "allergies.freeText" (e.g., "The patient reported a penicillin allergy based on family history...").
+- If "vitalsTrend" has entries, weave the clinically significant trend into the in-flight paragraph of the template with times (e.g., "blood pressure demonstrated a continued upward trend throughout transport"), including a clinical interpretation supported by the data. In the narrative, reference any clinically significant trend (e.g., "BP normalized after fluid resuscitation between 08:42 and 09:10").
 - If a data field is empty, omit that bullet/sentence rather than writing "N/A" everywhere.
 - If "ekg" is provided, include the EKG interpretation/diagnosis under the diagnostic studies in both the narrative and the template (e.g., "EKG: acute inferior STEMI"). Use only what the "ekg" text states; do not infer additional findings.
-- If "homeMeds" has entries, include a "Home Medications:" section in the template listing each medication with its dose (e.g., "Lisinopril 10 mg daily; Metformin 1000 mg BID"). Also incorporate any "homeMedsNotes" free text. Reference clinically relevant home meds (anticoagulants, antiplatelets, beta-blockers, insulin, immunosuppressants) in the narrative where pertinent. Do not invent home meds, doses, or uses not provided.
+- If "homeMeds" has entries, mention clinically relevant home medications with doses in prose in the template's HPI or assessment paragraph (e.g., "Home medications included lisinopril 10 mg daily and metformin 1000 mg twice daily"). Also incorporate any "homeMedsNotes" free text. Reference clinically relevant home meds (anticoagulants, antiplatelets, beta-blockers, insulin, immunosuppressants) in the narrative where pertinent. Do not invent home meds, doses, or uses not provided.
 - If "allergyConflicts" is a non-empty array, you MUST add a clearly worded SAFETY ALERT line in BOTH outputs, e.g., "⚠ ALLERGY ALERT: [medName] was administered/listed despite a documented allergy to [allergen] ([reaction])." List every conflict. Do not soften or omit it. If "allergyConflicts" is empty, do not mention any conflict.
 - MENTAL-STATUS / BRIEFING RULE: Judge the patient's mental status from the data (assess.gcs, assess.rass, sedation, vent/intubation, and any "unresponsive / sedated / intubated / obtunded / comatose / altered" wording in cc, onset, or assess.neuro). If the patient is unconscious, sedated, intubated, or has altered mental status (e.g., GCS < 14, RASS ≤ -1, or sedation/intubation present), DO NOT write that the patient was briefed about their condition or the transport plan or that they "acknowledged"/"verbalized" understanding. Instead state that the patient could not be briefed due to their condition (name the reason — sedation, intubation, or altered mental status) and that the family/POA/sending team was informed if the data supports it. Use the "briefed" field as the source of truth when present, but never assert patient understanding that contradicts the documented mental status. Only state the patient was briefed and understood when the data shows they were alert/oriented enough to do so.
 - Use professional EMS/clinical language.
